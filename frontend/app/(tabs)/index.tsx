@@ -6,8 +6,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState } from '../../components/AppContext';
 import * as DocumentPicker from 'expo-document-picker';
-
-const API = process.env.EXPO_PUBLIC_BACKEND_URL;
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NativeAnalysis from '../../modules/NativeAnalysis';
 
 interface LogEntry {
   log_id: string;
