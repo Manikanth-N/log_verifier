@@ -62,6 +62,13 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabIcon name="document-text-outline" color={color} />,
           }}
         />
+        <Tabs.Screen
+          name="advanced"
+          options={{
+            title: 'Advanced',
+            tabBarIcon: ({ color }) => <TabIcon name="speedometer-outline" color={color} />,
+          }}
+        />
       </Tabs>
     </View>
   );

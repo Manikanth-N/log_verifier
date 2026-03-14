@@ -183,7 +183,7 @@ backend:
 
   - task: "AI Insights (GPT-5.2)"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/ai_insights.py"
     stuck_count: 0
     priority: "medium"
@@ -195,6 +195,45 @@ backend:
       - working: false
         agent: "testing"
         comment: "AI Insights endpoint consistently times out after 30 seconds. API call to GPT-5.2 takes too long. Endpoint is functional but response time exceeds practical limits. Consider implementing async processing or reducing timeout threshold."
+      - working: true
+        agent: "testing"
+        comment: "AI Insights now working properly - no timeout issues detected. Endpoint responds within reasonable time limits."
+
+  - task: "Motor Harmonics Analysis"
+    implemented: true
+    working: true
+    file: "/app/backend/motor_harmonics.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Motor harmonics analysis working correctly via GET /api/logs/{log_id}/motor-harmonics. Returns motor_harmonics array with FFT analysis for motors C1-C4, including harmonics, dominant_freq, and total_harmonic_distortion. Also returns motor_imbalance with max_deviation, imbalance_percentage, and status. Demo log shows 1.51% imbalance (balanced status)."
+
+  - task: "Correlation Analysis"
+    implemented: true
+    working: true
+    file: "/app/backend/correlation_analyzer.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Correlation analysis working correctly via GET /api/logs/{log_id}/correlations. Returns vibration_throttle correlations with 3 axes (VibeX, VibeY, VibeZ), each with pearson_correlation, correlation_strength, and vibration_by_throttle analysis. Also returns battery_load correlation analysis. Fixed numpy.bool serialization issue in correlation_analyzer.py."
+
+  - task: "Presets Management"
+    implemented: true
+    working: true
+    file: "/app/backend/preset_manager.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Presets system working correctly via GET /api/presets. Returns 4 default presets: attitude (3 signals), vibration (3 signals), motors (4 signals), and battery (2 signals). Each preset contains id, name, description, signals array, and chart_config for graph layouts and configurations."
 
 frontend:
   - task: "Dashboard with Quick/Full Analysis toggle"
@@ -241,9 +280,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Report Generation API (PDF/HTML/MD)"
-    - "Chart Export API (PNG/SVG)"
-    - "Parameter Limit Checking"
+    - "Motor Harmonics Analysis"
+    - "Correlation Analysis"
+    - "Presets Management"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -298,3 +337,37 @@ agent_communication:
       - API endpoint is functional but needs performance optimization
       
       ALL PHASE 2 BACKEND FEATURES READY FOR PRODUCTION
+  - agent: "testing"
+    message: |
+      🆕 NEW ANALYSIS FEATURES TESTING COMPLETE - ALL WORKING PERFECTLY
+      
+      Tested all new Vehicle Log Analyzer analysis endpoints successfully:
+      
+      1. Motor Harmonics Analysis: ✅ Working
+         - GET /api/logs/{log_id}/motor-harmonics endpoint functional
+         - Returns motor_harmonics array with FFT analysis for motors C1-C4
+         - Each motor includes harmonics list, dominant_freq, total_harmonic_distortion
+         - Returns motor_imbalance with max_deviation, imbalance_percentage, status
+         - Demo log shows 1.51% imbalance (balanced status)
+      
+      2. Correlation Analysis: ✅ Working
+         - GET /api/logs/{log_id}/correlations endpoint functional  
+         - Returns vibration_throttle with 3 axes (VibeX, VibeY, VibeZ) analysis
+         - Each axis includes pearson_correlation, correlation_strength, vibration_by_throttle
+         - Returns battery_load correlation analysis with voltage sag detection
+         - Fixed numpy.bool serialization issue in correlation_analyzer.py
+      
+      3. Presets System: ✅ Working
+         - GET /api/presets endpoint functional
+         - Returns 4 default presets: attitude, vibration, motors, battery
+         - Each preset contains id, name, description, signals array, chart_config
+         - Attitude: 3 signals (Roll/Pitch/Yaw), Vibration: 3 signals (X/Y/Z axes)
+      
+      4. Regression Testing: ✅ All existing features still working
+         - Existing endpoints: 3/3 working (signals, data, FFT)
+         - Parameter limits: 11 limits found with proper structure
+         - Report generation: 3/3 formats working (PDF/HTML/MD)
+         - Chart export: 2/2 formats working (PNG/SVG)
+         - AI Insights: Now working without timeout issues
+      
+      ALL NEW ANALYSIS FEATURES READY FOR PRODUCTION

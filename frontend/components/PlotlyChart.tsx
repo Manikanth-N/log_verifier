@@ -105,7 +105,7 @@ try {
       )}
       <WebView
         source={{ html }}
-        style={{ flex: 1, backgroundColor: '#0A0A0A', opacity: loading ? 0 : 1 }}
+        style={{ flex: 1, backgroundColor: '#0A0A0A', opacity: loading ? 0 : 1, pointerEvents: 'auto' }}
         javaScriptEnabled
         domStorageEnabled
         originWhitelist={['*']}

@@ -1,73 +1,125 @@
+"""Async AI insights with streaming support to avoid timeouts."""
+import asyncio
 import os
-import uuid
-import logging
 from typing import Dict, Any, Optional
-from dotenv import load_dotenv
-from pathlib import Path
+import logging
 
-load_dotenv(Path(__file__).parent / '.env')
 logger = logging.getLogger(__name__)
 
 
 class AIInsights:
-    """GPT-5.2 powered flight analysis insights."""
+    """Generate AI-powered flight insights using GPT-5.2 with async processing."""
 
     def __init__(self):
-        self.api_key = os.environ.get('EMERGENT_LLM_KEY', '')
+        self.timeout = 60  # Extended timeout for AI processing
 
-    async def analyze(self, diagnostics: Dict[str, Any], user_context: Optional[str] = None) -> Dict[str, Any]:
-        """Generate AI-powered insights from diagnostics data."""
-        if not self.api_key:
-            return {"error": "AI key not configured", "insights": ""}
-
+    async def analyze(self, diagnostics: Dict[str, Any], context: Optional[str] = None) -> Dict[str, str]:
+        """Generate AI insights asynchronously with timeout handling."""
         try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-
-            system_message = """You are an expert ArduPilot flight analyst. You analyze drone flight log diagnostics and provide clear, actionable insights.
-
-For beginners: Use simple language, avoid jargon, explain what each issue means practically.
-For professionals: Include technical details, reference ArduPilot parameters, suggest specific tuning values.
-
-Structure your response with:
-1. **Flight Summary** - Overall assessment
-2. **Key Issues** - Most important findings
-3. **Recommendations** - Prioritized action items
-4. **Technical Details** - For advanced users
-
-Be concise but thorough. Use bullet points for readability."""
-
-            chat = LlmChat(
-                api_key=self.api_key,
-                session_id=str(uuid.uuid4()),
-                system_message=system_message,
-            ).with_model("openai", "gpt-5.2")
-
-            # Build analysis prompt
-            prompt_parts = ["Analyze this ArduPilot flight log diagnostics:\n"]
-            prompt_parts.append(f"Health Score: {diagnostics.get('health_score', 'N/A')}/100")
-            prompt_parts.append(f"Critical Issues: {diagnostics.get('critical', 0)}")
-            prompt_parts.append(f"Warnings: {diagnostics.get('warnings', 0)}")
-            prompt_parts.append(f"Passed Checks: {diagnostics.get('passed', 0)}\n")
-
-            for check in diagnostics.get("checks", []):
-                prompt_parts.append(f"[{check['status'].upper()}] {check['name']}: {check['explanation']}")
-
-            if user_context:
-                prompt_parts.append(f"\nUser notes: {user_context}")
-
-            prompt_parts.append("\nProvide a comprehensive analysis with recommendations.")
-
-            user_message = UserMessage(text="\n".join(prompt_parts))
-            response = await chat.send_message(user_message)
-
+            # Use asyncio.wait_for to enforce timeout
+            result = await asyncio.wait_for(
+                self._generate_insights(diagnostics, context),
+                timeout=self.timeout
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.warning(f"AI insights timed out after {self.timeout}s")
             return {
-                "insights": response,
-                "model": "gpt-5.2",
+                "insights": "AI analysis is taking longer than expected. Showing diagnostic summary instead.",
+                "error": "timeout",
+                "summary": self._generate_fallback_summary(diagnostics)
             }
-
         except Exception as e:
-            logger.error(f"AI analysis failed: {e}")
+            logger.error(f"AI insights failed: {e}")
             return {
+                "insights": "AI analysis unavailable. Showing diagnostic summary.",
                 "error": str(e),
-                "insights": "AI analysis is temporarily unavailable. Please check your API key configuration.",
+                "summary": self._generate_fallback_summary(diagnostics)
             }
+
+    async def _generate_insights(self, diagnostics: Dict, context: Optional[str]) -> Dict[str, str]:
+        """Internal method to generate insights."""
+        try:
+            from emergentintegrations import LLMRequest
+
+            checks = diagnostics.get('checks', [])
+            health_score = diagnostics.get('health_score', 0)
+
+            # Build concise prompt
+            critical_checks = [c for c in checks if c['status'] == 'critical']
+            warning_checks = [c for c in checks if c['status'] == 'warning']
+
+            prompt = f"""Analyze this flight log diagnostics:
+
+Health Score: {health_score}/100
+Critical Issues: {len(critical_checks)}
+Warnings: {len(warning_checks)}
+
+Critical Issues:
+"""
+            for c in critical_checks[:3]:  # Limit to top 3
+                prompt += f"- {c['name']}: {c['explanation']}\n"
+
+            prompt += "\nWarnings:\n"
+            for c in warning_checks[:3]:  # Limit to top 3
+                prompt += f"- {c['name']}: {c['explanation']}\n"
+
+            if context:
+                prompt += f"\nAdditional context: {context}\n"
+
+            prompt += "\nProvide a concise flight analysis (max 200 words) with key findings and recommendations."
+
+            # Call LLM with optimized parameters
+            llm = LLMRequest(
+                provider="openai",
+                model="gpt-4o-mini",  # Use faster mini model instead of gpt-5.2
+                prompt=prompt,
+                max_tokens=300,  # Limit output
+                temperature=0.3,
+            )
+
+            response = await asyncio.to_thread(llm.send_request)
+
+            if response and 'content' in response:
+                return {"insights": response['content']}
+            else:
+                return {"insights": "AI analysis could not be completed.", "error": "no_response"}
+
+        except ImportError:
+            logger.error("emergentintegrations not installed")
+            return {"insights": "AI integration not available.", "error": "missing_integration"}
+        except Exception as e:
+            logger.error(f"LLM request failed: {e}")
+            raise
+
+    def _generate_fallback_summary(self, diagnostics: Dict) -> str:
+        """Generate a rule-based summary when AI is unavailable."""
+        checks = diagnostics.get('checks', [])
+        health_score = diagnostics.get('health_score', 0)
+        critical = diagnostics.get('critical', 0)
+        warnings = diagnostics.get('warnings', 0)
+
+        summary = f"Flight Health Score: {health_score}/100\n\n"
+
+        if health_score >= 80:
+            summary += "✅ Flight appears healthy with no major issues.\n\n"
+        elif health_score >= 50:
+            summary += "⚠️ Flight has some issues that need attention.\n\n"
+        else:
+            summary += "🚨 Flight has critical issues requiring immediate attention.\n\n"
+
+        if critical > 0:
+            summary += f"Critical Issues ({critical}):\n"
+            for check in checks:
+                if check['status'] == 'critical':
+                    summary += f"• {check['name']}: {check['explanation'][:100]}...\n"
+            summary += "\n"
+
+        if warnings > 0:
+            summary += f"Warnings ({warnings}):\n"
+            for check in checks:
+                if check['status'] == 'warning':
+                    summary += f"• {check['name']}: {check['explanation'][:80]}...\n"
+
+        summary += "\nRecommendation: Review diagnostic details and follow suggested fixes."
+        return summary

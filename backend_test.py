@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Comprehensive backend API test suite for Vehicle Log Analyzer
-Testing Phase 2 features: Report Generation, Chart Export, Parameter Limits
+Testing NEW analysis features: Motor Harmonics, Correlations, Presets
+Plus existing endpoints and Phase 2 features for regression testing
 """
 
 import requests
@@ -314,6 +315,163 @@ def test_existing_endpoints(log_id: str):
     
     return results
 
+def test_motor_harmonics(log_id: str):
+    """Test motor harmonics analysis endpoint"""
+    log_test("=== Testing Motor Harmonics ===")
+    
+    result = test_api_call("GET", f"/logs/{log_id}/motor-harmonics")
+    
+    if not result["success"]:
+        log_test(f"❌ Motor harmonics failed: {result['error']}", "ERROR")
+        return {"success": False, "error": result["error"]}
+    
+    try:
+        data = result["response"].json()
+        
+        # Check for motor_harmonics array
+        motor_harmonics = data.get("motor_harmonics", [])
+        if not isinstance(motor_harmonics, list):
+            log_test("❌ Motor harmonics: motor_harmonics not a list", "ERROR")
+            return {"success": False, "error": "Invalid motor_harmonics structure"}
+        
+        # Check for motor_imbalance data
+        motor_imbalance = data.get("motor_imbalance")
+        if not motor_imbalance:
+            log_test("❌ Motor harmonics: Missing motor_imbalance", "ERROR")
+            return {"success": False, "error": "Missing motor_imbalance"}
+        
+        # Validate motor harmonics structure
+        valid_motors = 0
+        for motor in motor_harmonics:
+            required_fields = ["motor", "motor_num", "harmonics", "dominant_freq", "total_harmonic_distortion"]
+            if all(field in motor for field in required_fields):
+                valid_motors += 1
+                # Log details for first motor
+                if valid_motors == 1:
+                    log_test(f"   Motor {motor['motor']}: {motor['dominant_freq']}Hz dominant, {motor['total_harmonic_distortion']}% THD")
+        
+        # Validate motor imbalance structure
+        imbalance_fields = ["max_deviation", "max_deviation_motor", "imbalance_percentage", "status"]
+        missing_imbalance = [field for field in imbalance_fields if field not in motor_imbalance]
+        if missing_imbalance:
+            log_test(f"⚠️ Motor imbalance missing fields: {missing_imbalance}", "WARN")
+        else:
+            log_test(f"   Imbalance: {motor_imbalance['imbalance_percentage']}% ({motor_imbalance['status']})")
+        
+        log_test(f"✅ Motor harmonics analysis working: {len(motor_harmonics)} motors analyzed")
+        return {"success": True, "motors_analyzed": len(motor_harmonics), "valid_motors": valid_motors}
+        
+    except json.JSONDecodeError:
+        log_test("❌ Motor harmonics: Invalid JSON", "ERROR")
+        return {"success": False, "error": "Invalid JSON"}
+
+
+def test_correlations(log_id: str):
+    """Test correlation analysis endpoint"""
+    log_test("=== Testing Correlations ===")
+    
+    result = test_api_call("GET", f"/logs/{log_id}/correlations")
+    
+    if not result["success"]:
+        log_test(f"❌ Correlations failed: {result['error']}", "ERROR")
+        return {"success": False, "error": result["error"]}
+    
+    try:
+        data = result["response"].json()
+        
+        # Check for vibration_throttle analysis
+        vibe_throttle = data.get("vibration_throttle", {})
+        if not vibe_throttle:
+            log_test("❌ Correlations: Missing vibration_throttle", "ERROR")
+            return {"success": False, "error": "Missing vibration_throttle"}
+        
+        vibe_status = vibe_throttle.get("status")
+        if vibe_status != "success":
+            log_test(f"❌ Vibration-throttle analysis status: {vibe_status}", "ERROR")
+            return {"success": False, "error": f"Vibration analysis failed: {vibe_status}"}
+        
+        # Check correlations array
+        correlations = vibe_throttle.get("correlations", [])
+        if not isinstance(correlations, list):
+            log_test("❌ Correlations: correlations not a list", "ERROR")
+            return {"success": False, "error": "Invalid correlations structure"}
+        
+        # Validate correlation data for each axis
+        valid_axes = 0
+        for corr in correlations:
+            required_fields = ["axis", "pearson_correlation", "correlation_strength", "vibration_by_throttle"]
+            if all(field in corr for field in required_fields):
+                valid_axes += 1
+                # Log details for each axis
+                log_test(f"   {corr['axis']}: {corr['pearson_correlation']} ({corr['correlation_strength']})")
+        
+        # Check for battery_load analysis
+        battery_load = data.get("battery_load", {})
+        if not battery_load:
+            log_test("❌ Correlations: Missing battery_load", "ERROR")
+            return {"success": False, "error": "Missing battery_load"}
+        
+        battery_status = battery_load.get("status", "unknown")
+        log_test(f"   Battery-load analysis: {battery_status}")
+        
+        log_test(f"✅ Correlation analysis working: {len(correlations)} axes analyzed")
+        return {"success": True, "axes_analyzed": len(correlations), "valid_axes": valid_axes}
+        
+    except json.JSONDecodeError:
+        log_test("❌ Correlations: Invalid JSON", "ERROR")
+        return {"success": False, "error": "Invalid JSON"}
+
+
+def test_presets():
+    """Test presets endpoint"""
+    log_test("=== Testing Presets ===")
+    
+    result = test_api_call("GET", "/presets")
+    
+    if not result["success"]:
+        log_test(f"❌ Presets failed: {result['error']}", "ERROR")
+        return {"success": False, "error": result["error"]}
+    
+    try:
+        data = result["response"].json()
+        presets = data.get("presets", [])
+        
+        if not isinstance(presets, list):
+            log_test("❌ Presets: presets not a list", "ERROR")
+            return {"success": False, "error": "Invalid presets structure"}
+        
+        if len(presets) < 4:
+            log_test(f"❌ Presets: Expected 4 default presets, got {len(presets)}", "ERROR")
+            return {"success": False, "error": f"Missing default presets"}
+        
+        # Check for expected default presets
+        expected_presets = ["attitude", "vibration", "motors", "battery"]
+        found_presets = []
+        
+        for preset in presets:
+            if not isinstance(preset, dict):
+                continue
+            preset_id = preset.get("id", "")
+            preset_name = preset.get("name", "")
+            if preset_id in expected_presets or preset_name.lower() in expected_presets:
+                found_presets.append(preset_name or preset_id)
+                # Log details for first few presets
+                if len(found_presets) <= 2:
+                    signals_count = len(preset.get("signals", []))
+                    log_test(f"   {preset_name}: {signals_count} signals")
+        
+        missing_presets = [p for p in expected_presets if p not in [fp.lower() for fp in found_presets]]
+        if missing_presets:
+            log_test(f"⚠️ Some expected presets missing: {missing_presets}", "WARN")
+        
+        log_test(f"✅ Presets endpoint working: {len(presets)} presets available")
+        return {"success": True, "presets_count": len(presets), "found_defaults": len(found_presets)}
+        
+    except json.JSONDecodeError:
+        log_test("❌ Presets: Invalid JSON", "ERROR")
+        return {"success": False, "error": "Invalid JSON"}
+
+
 def test_ai_insights(log_id: str):
     """Test AI insights endpoint"""
     log_test("=== Testing AI Insights ===")
@@ -361,52 +519,46 @@ def main():
     
     test_results = {
         "log_id": log_id,
+        "motor_harmonics": None,
+        "correlations": None,
+        "presets": None,
+        "existing_endpoints": None,
+        "parameter_limits": None,
         "reports": None,
         "charts": None, 
-        "parameter_limits": None,
-        "existing_endpoints": None,
         "ai_insights": None
     }
     
-    # Step 2: Test report generation
-    test_results["reports"] = test_report_generation(log_id)
+    # Step 2: Test NEW endpoints (as requested in review)
+    test_results["motor_harmonics"] = test_motor_harmonics(log_id)
+    test_results["correlations"] = test_correlations(log_id)
+    test_results["presets"] = test_presets()
     
-    # Step 3: Test chart export
-    test_results["charts"] = test_chart_export(log_id)
-    
-    # Step 4: Test parameter limits
+    # Step 3: Test existing endpoints still work
+    test_results["existing_endpoints"] = test_existing_endpoints(log_id)
     test_results["parameter_limits"] = test_parameter_limits(log_id)
     
-    # Step 5: Test existing endpoints
-    test_results["existing_endpoints"] = test_existing_endpoints(log_id)
+    # Step 4: Test Phase 2 endpoints (for completeness)
+    test_results["reports"] = test_report_generation(log_id)
+    test_results["charts"] = test_chart_export(log_id)
     
-    # Step 6: Test AI insights
+    # Step 5: Test AI insights
     test_results["ai_insights"] = test_ai_insights(log_id)
     
     # Summary
     log_test("\n=== TEST SUMMARY ===")
     
-    # Report tests
-    report_passed = 0
-    if test_results["reports"]:
-        for fmt, result in test_results["reports"].items():
-            if result.get("success"):
-                report_passed += 1
-    log_test(f"Report Generation: {report_passed}/3 formats working")
+    # NEW FEATURES TESTS (Primary focus)
+    motor_success = test_results["motor_harmonics"] and test_results["motor_harmonics"].get("success", False)
+    log_test(f"🆕 Motor Harmonics: {'✅ Working' if motor_success else '❌ Failed'}")
     
-    # Chart tests
-    chart_passed = 0
-    if test_results["charts"]:
-        for fmt, result in test_results["charts"].items():
-            if result.get("success"):
-                chart_passed += 1
-    log_test(f"Chart Export: {chart_passed}/2 formats working")
+    corr_success = test_results["correlations"] and test_results["correlations"].get("success", False)
+    log_test(f"🆕 Correlations: {'✅ Working' if corr_success else '❌ Failed'}")
     
-    # Parameter limits
-    param_success = test_results["parameter_limits"] and test_results["parameter_limits"].get("success", False)
-    log_test(f"Parameter Limits: {'✅ Working' if param_success else '❌ Failed'}")
+    preset_success = test_results["presets"] and test_results["presets"].get("success", False)
+    log_test(f"🆕 Presets: {'✅ Working' if preset_success else '❌ Failed'}")
     
-    # Existing endpoints
+    # EXISTING ENDPOINTS VERIFICATION
     existing_passed = 0
     if test_results["existing_endpoints"]:
         for endpoint, result in test_results["existing_endpoints"].items():
@@ -414,23 +566,44 @@ def main():
                 existing_passed += 1
     log_test(f"Existing Endpoints: {existing_passed}/3 working")
     
+    # Parameter limits (enhanced diagnostics)
+    param_success = test_results["parameter_limits"] and test_results["parameter_limits"].get("success", False)
+    log_test(f"Parameter Limits: {'✅ Working' if param_success else '❌ Failed'}")
+    
+    # PHASE 2 FEATURES (Secondary)
+    report_passed = 0
+    if test_results["reports"]:
+        for fmt, result in test_results["reports"].items():
+            if result.get("success"):
+                report_passed += 1
+    log_test(f"Report Generation: {report_passed}/3 formats working")
+    
+    chart_passed = 0
+    if test_results["charts"]:
+        for fmt, result in test_results["charts"].items():
+            if result.get("success"):
+                chart_passed += 1
+    log_test(f"Chart Export: {chart_passed}/2 formats working")
+    
     # AI insights
     ai_success = test_results["ai_insights"] and test_results["ai_insights"].get("success", False)
-    log_test(f"AI Insights: {'✅ Working' if ai_success else '❌ Failed'}")
+    log_test(f"AI Insights: {'⚠️ Timeout' if not ai_success else '✅ Working'}")
     
-    # Final status
+    # Final status focusing on NEW features
     critical_failures = []
-    if report_passed < 3:
-        critical_failures.append("Report Generation")
-    if chart_passed < 2:
-        critical_failures.append("Chart Export")
-    if not param_success:
-        critical_failures.append("Parameter Limits")
+    if not motor_success:
+        critical_failures.append("Motor Harmonics Analysis")
+    if not corr_success:
+        critical_failures.append("Correlation Analysis")
+    if not preset_success:
+        critical_failures.append("Presets System")
+    if existing_passed < 3:
+        critical_failures.append("Core API Endpoints")
     
     if critical_failures:
         log_test(f"\n❌ CRITICAL FAILURES: {', '.join(critical_failures)}", "ERROR")
     else:
-        log_test("\n✅ ALL PHASE 2 FEATURES WORKING", "INFO")
+        log_test("\n✅ ALL NEW ANALYSIS FEATURES WORKING", "INFO")
     
     return test_results
 

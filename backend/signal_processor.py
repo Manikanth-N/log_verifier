@@ -196,9 +196,9 @@ class SignalProcessor:
         return out_x, out_y
 
     def to_csv(self, signal_data: Dict[str, list]) -> str:
-        """Convert signal data to CSV string."""
+        """Convert signal data to CSV string with proper encoding."""
         output = io.StringIO()
-        writer = csv.writer(output)
+        writer = csv.writer(output, lineterminator='\n')
 
         fields = list(signal_data.keys())
         writer.writerow(fields)
@@ -208,7 +208,13 @@ class SignalProcessor:
             row = []
             for field in fields:
                 vals = signal_data[field]
-                row.append(vals[i] if i < len(vals) else "")
+                val = vals[i] if i < len(vals) else ""
+                # Ensure all values are properly encoded
+                if isinstance(val, (int, float)):
+                    row.append(val)
+                else:
+                    # Handle any special characters
+                    row.append(str(val).encode('utf-8', errors='replace').decode('utf-8'))
             writer.writerow(row)
 
         return output.getvalue()

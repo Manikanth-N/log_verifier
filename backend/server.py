@@ -17,6 +17,10 @@ from diagnostics_engine import DiagnosticsEngine
 from ai_insights import AIInsights
 from chart_generator import generate_multi_signal_chart, generate_all_report_charts
 from report_generator import generate_pdf_report, generate_html_report, generate_markdown_report
+from motor_harmonics import MotorHarmonicsDetector
+from correlation_analyzer import CorrelationAnalyzer
+from plugin_system import PluginManager
+from preset_manager import PresetManager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -36,6 +40,13 @@ log_data_cache: Dict[str, Dict] = {}
 signal_processor = SignalProcessor()
 diagnostics_engine = DiagnosticsEngine()
 ai_insights = AIInsights()
+motor_harmonics_detector = MotorHarmonicsDetector()
+correlation_analyzer = CorrelationAnalyzer()
+plugin_manager = PluginManager()
+preset_manager = PresetManager()
+
+# Load plugins at startup
+plugin_manager.load_plugins()
 
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -373,6 +384,124 @@ async def export_chart(log_id: str, request: ChartExportRequest):
         media_type=content_type,
         headers={"Content-Disposition": f"attachment; filename=chart.{fmt}"},
     )
+
+
+@api_router.get("/logs/{log_id}/motor-harmonics")
+async def get_motor_harmonics(log_id: str):
+    """Get motor harmonic analysis."""
+    if log_id not in log_data_cache:
+        raise HTTPException(404, "Log data not in cache")
+    data = log_data_cache[log_id]
+    log_meta = await db.logs.find_one({"log_id": log_id}, {"_id": 0})
+    duration = log_meta.get("duration_sec", 120) if log_meta else 120
+    
+    if "RCOU" not in data["signals"]:
+        raise HTTPException(400, "No motor output data (RCOU) in log")
+    
+    results = motor_harmonics_detector.analyze(data["signals"]["RCOU"], duration)
+    return {"log_id": log_id, **results}
+
+
+@api_router.get("/logs/{log_id}/correlations")
+async def get_correlations(log_id: str):
+    """Get correlation analysis (vibration-throttle, battery-load)."""
+    if log_id not in log_data_cache:
+        raise HTTPException(404, "Log data not in cache")
+    data = log_data_cache[log_id]
+    
+    vibe_throttle = correlation_analyzer.analyze_vibration_throttle_correlation(data["signals"])
+    battery_load = correlation_analyzer.analyze_battery_load_correlation(data["signals"])
+    
+    return {
+        "log_id": log_id,
+        "vibration_throttle": vibe_throttle,
+        "battery_load": battery_load,
+    }
+
+
+@api_router.get("/presets")
+async def list_presets():
+    """List all available presets."""
+    return {"presets": preset_manager.list_presets()}
+
+
+@api_router.post("/presets")
+async def create_preset(preset_data: Dict):
+    """Create a new preset."""
+    name = preset_data.get("name", "Untitled Preset")
+    signals = preset_data.get("signals", [])
+    description = preset_data.get("description", "")
+    chart_config = preset_data.get("chart_config", {})
+    author = preset_data.get("author", "User")
+    
+    preset = preset_manager.create_preset(name, signals, description, chart_config, author)
+    return preset
+
+
+@api_router.get("/presets/{preset_id}")
+async def get_preset(preset_id: str):
+    """Get a specific preset."""
+    preset = preset_manager.get_preset(preset_id)
+    if not preset:
+        raise HTTPException(404, "Preset not found")
+    return preset
+
+
+@api_router.delete("/presets/{preset_id}")
+async def delete_preset(preset_id: str):
+    """Delete a preset."""
+    success = preset_manager.delete_preset(preset_id)
+    if not success:
+        raise HTTPException(400, "Cannot delete preset")
+    return {"message": "Preset deleted"}
+
+
+@api_router.get("/presets/{preset_id}/export")
+async def export_preset(preset_id: str):
+    """Export preset as JSON."""
+    preset_json = preset_manager.export_preset(preset_id)
+    if not preset_json:
+        raise HTTPException(404, "Preset not found")
+    return Response(
+        content=preset_json,
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=preset_{preset_id}.json"},
+    )
+
+
+@api_router.post("/presets/import")
+async def import_preset(request: Dict):
+    """Import preset from JSON."""
+    preset_json = request.get("preset_json", "")
+    preset = preset_manager.import_preset(preset_json)
+    if not preset:
+        raise HTTPException(400, "Failed to import preset")
+    return preset
+
+
+@api_router.get("/plugins")
+async def list_plugins():
+    """List all loaded plugins."""
+    return {"plugins": plugin_manager.list_plugins()}
+
+
+@api_router.post("/logs/{log_id}/run-plugin")
+async def run_plugin(log_id: str, request: Dict):
+    """Run a specific plugin on log data."""
+    if log_id not in log_data_cache:
+        raise HTTPException(404, "Log data not in cache")
+    
+    plugin_name = request.get("plugin_name", "")
+    if not plugin_name:
+        raise HTTPException(400, "plugin_name required")
+    
+    data = log_data_cache[log_id]
+    result = plugin_manager.run_plugin(plugin_name, data)
+    
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    
+    return {"log_id": log_id, "plugin": plugin_name, "result": result}
 
 
 app.include_router(api_router)
