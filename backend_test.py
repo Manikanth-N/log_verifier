@@ -12,7 +12,7 @@ import time
 from typing import Dict, Any, Optional
 
 # Use backend URL from environment 
-BACKEND_URL = "https://log-autopsy.preview.emergentagent.com/api"
+BACKEND_URL = "https://repo-dev-complete.preview.emergentagent.com/api"
 
 def log_test(message: str, level: str = "INFO"):
     """Simple logging function"""
