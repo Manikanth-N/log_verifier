@@ -1,0 +1,209 @@
+{
+  "project_name": "ArduPilot Flight Log Analyzer",
+  "design_philosophy": {
+    "persona": "E1: The Anti-AI Designer",
+    "core_principles": [
+      "Fusion over Imitation: Mix Mission Control aesthetics with Sci-Fi HUD precision.",
+      "Emotion First: The user is a Pilot/Engineer. The UI must feel robust, precise, and trusted.",
+      "Content is King: Data is the hero. Chrome is minimal.",
+      "Negative Space: Use it to separate dense data clusters.",
+      "Contrast: High contrast for sunlight readability (if field use) and dark mode focus."
+    ],
+    "anti_patterns": [
+      "Purple/Teal primary buttons (reserved for AI/Special actions only).",
+      "Center alignment for data (Left align always).",
+      "Gradient overload (Flat or subtle texture preferred).",
+      "Soft shadows (Use sharp borders and glow)."
+    ]
+  },
+  "tech_stack": {
+    "framework": "Expo React Native (Mobile + Web)",
+    "styling": "NativeWind (Tailwind CSS for Native)",
+    "icons": "Lucide React Native",
+    "charts": "react-native-gifted-charts or victory-native (High Performance)",
+    "maps": "react-native-maps (Mobile) / react-map-gl (Web)",
+    "fonts": "Space Mono (Data), Inter/System (UI)"
+  },
+  "theme": {
+    "mode": "dark",
+    "colors": {
+      "background": {
+        "primary": "#050505",
+        "secondary": "#0A0A0A",
+        "tertiary": "#121212",
+        "card": "#171717",
+        "overlay": "rgba(0,0,0,0.8)"
+      },
+      "text": {
+        "primary": "#FFFFFF",
+        "secondary": "#A1A1AA",
+        "muted": "#52525B",
+        "accent": "#FF3B30"
+      },
+      "border": {
+        "default": "#27272A",
+        "active": "#3F3F46",
+        "highlight": "#00FF88"
+      },
+      "brand": {
+        "primary": "#007AFF",
+        "secondary": "#FF3B30",
+        "accent": "#00FF88",
+        "warning": "#FF9500",
+        "destructive": "#FF453A"
+      },
+      "charts": {
+        "series_1": "#007AFF",
+        "series_2": "#FF3B30",
+        "series_3": "#00FF88",
+        "series_4": "#FF9500",
+        "series_5": "#BF5AF2",
+        "grid": "#27272A"
+      }
+    },
+    "typography": {
+      "font_family": {
+        "sans": "System",
+        "mono": "SpaceMono"
+      },
+      "scale": {
+        "xs": "text-xs",
+        "sm": "text-sm",
+        "base": "text-base",
+        "lg": "text-lg",
+        "xl": "text-xl",
+        "2xl": "text-2xl",
+        "3xl": "text-3xl"
+      }
+    },
+    "spacing": {
+      "container_padding": "p-4 md:p-6 lg:p-8",
+      "section_gap": "gap-4 md:gap-6",
+      "element_gap": "gap-2 md:gap-3"
+    },
+    "radius": {
+      "default": "rounded-lg",
+      "sm": "rounded-md",
+      "full": "rounded-full"
+    }
+  },
+  "components": {
+    "instructions": "Use NativeWind classes. Create reusable components in /components/ui/. Avoid raw View/Text styling in screens.",
+    "library": [
+      {
+        "name": "Button",
+        "styles": "h-12 px-6 rounded-lg flex-row items-center justify-center font-medium active:opacity-80",
+        "variants": {
+          "default": "bg-brand-primary text-white",
+          "destructive": "bg-brand-destructive text-white",
+          "outline": "border border-border-default bg-transparent text-text-primary",
+          "ghost": "bg-transparent text-text-primary hover:bg-background-tertiary",
+          "tactical": "bg-background-tertiary border border-brand-accent/30 text-brand-accent uppercase tracking-wider"
+        }
+      },
+      {
+        "name": "Card",
+        "styles": "bg-background-card border border-border-default rounded-xl p-4 md:p-6 shadow-sm",
+        "variants": {
+          "glass": "bg-background-card/80 backdrop-blur-md border-border-default/50",
+          "interactive": "active:border-brand-primary/50 active:bg-background-tertiary transition-colors"
+        }
+      },
+      {
+        "name": "Input",
+        "styles": "h-12 bg-background-tertiary border border-border-default rounded-lg px-4 text-text-primary placeholder:text-text-muted focus:border-brand-primary focus:ring-1 focus:ring-brand-primary"
+      },
+      {
+        "name": "Badge",
+        "styles": "px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide",
+        "variants": {
+          "default": "bg-brand-primary/20 text-brand-primary border border-brand-primary/20",
+          "success": "bg-brand-accent/20 text-brand-accent border border-brand-accent/20",
+          "warning": "bg-brand-warning/20 text-brand-warning border border-brand-warning/20",
+          "destructive": "bg-brand-destructive/20 text-brand-destructive border border-brand-destructive/20"
+        }
+      }
+    ]
+  },
+  "layouts": {
+    "dashboard": {
+      "structure": "Responsive Grid. Mobile: Stack. Desktop: 3-Column (Left: Files/Signals, Center: Main Analysis, Right: Diagnostics/AI)",
+      "classes": "flex-1 bg-background-primary"
+    },
+    "flight_log_list": {
+      "style": "List of 'Tactical Cards'. Each card shows: Flight Date, Duration, Max Alt, Battery Used, Health Score (Badge)."
+    },
+    "analysis_view": {
+      "style": "Split View. Top/Left: Signal Tree (Accordion). Center: Multi-Chart Canvas (Synced Scrubber). Bottom: Timeline."
+    },
+    "diagnostics_panel": {
+      "style": "Right Sidebar (Collapsible). Auto-scroll to warnings. Red/Yellow alerts prominent."
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Use sparingly on overlays (e.g., Modal, Floating Action Button, Toast).",
+    "borders": "1px solid borders are preferred over shadows in dark mode for definition.",
+    "gradients": "Avoid large gradients. Use subtle linear gradients on chart areas (fade to transparent) only.",
+    "motion": "Layout animations for expanding/collapsing panels (LayoutAnimation or Reanimated)."
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "hero",
+        "url": "https://images.unsplash.com/photo-1697122171927-c79709030f1d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxkcm9uZSUyMGZsaWdodCUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzczNDkwODg5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Small white object flying - Use for Welcome/Splash Screen or Empty State."
+      },
+      {
+        "category": "log_thumbnail",
+        "url": "https://images.unsplash.com/photo-1594538883213-cb85f3d8b2c2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHw0fHxkcm9uZSUyMGZsaWdodCUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzczNDkwODg5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "White and black drone - Use for generic flight log thumbnails."
+      },
+      {
+        "category": "map_preview",
+        "url": "https://images.unsplash.com/photo-1594538883504-e7720dda6bd8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwzfHxkcm9uZSUyMGZsaWdodCUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzczNDkwODg5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Drone in blue sky - Use for 'New Flight' or 'Upload' areas."
+      },
+      {
+        "category": "trajectory_bg",
+        "url": "https://images.unsplash.com/photo-1697122235975-8cb2d056aed8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwyfHxkcm9uZSUyMGZsaWdodCUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzczNDkwODg5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Airplane in sunset - Use for history or profile headers."
+      }
+    ],
+    "icons": {
+      "library": "Lucide React Native",
+      "mapping": {
+        "dashboard": "LayoutDashboard",
+        "upload": "UploadCloud",
+        "analysis": "Activity",
+        "diagnostics": "Stethoscope",
+        "settings": "Settings",
+        "map": "Map",
+        "log": "FileText",
+        "warning": "AlertTriangle",
+        "success": "CheckCircle",
+        "ai": "Sparkles"
+      }
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure text is APCA compliant (Lc 75+ for body text).",
+    "touch_targets": "Minimum 44x44 points for all interactive elements.",
+    "labels": "All inputs and buttons must have aria-label or accessibilityLabel."
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'nativewind', 'tailwindcss', and 'react-native-reanimated' if not present.",
+    "2. STRUCTURE: Create /components/ui/ folder. Build atomic components (Button, Card, Input) first.",
+    "3. NAVIGATION: Use Expo Router (app directory). Implement Tabs for mobile, Sidebar for Web (Responsive Layout).",
+    "4. CHARTS: Use 'react-native-gifted-charts' for mobile performance. Optimize for large datasets (downsample if >1000 points).",
+    "5. MOCK DATA: Create a robust mock flight log (JSON) with fields: altitude, speed, battery, vibration, gps.",
+    "6. AI: Mock the OpenAI response for now. Display it in a 'Copilot' chat interface.",
+    "7. UNIVERSAL: Ensure all Views use 'flex' and 'bg-background-primary' to fill screens."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do NOT use 'transition: all'. Animate specific properties.",
+    "Do NOT center align the app container. Left align text for readability.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Add 'data-testid' to all interactive elements.",
+    "For Web compatibility in Expo: use 'Platform.select' for platform-specific chart/map implementations if needed."
+  ]
+}
