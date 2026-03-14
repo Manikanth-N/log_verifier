@@ -89,3 +89,7 @@ backend/uploads/95bf69f0-b385-44f4-985e-31017f79d2fb.bin
 *.env.*
 backend/uploads/*.bin
 backend/uploads/*.log
+-e 
+# Environment files
+*.env
+*.env.*
