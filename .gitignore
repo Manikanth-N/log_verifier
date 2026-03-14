@@ -141,3 +141,7 @@ frontend/android/gradle/wrapper/gradle-wrapper.jar
 # Environment files
 *.env
 *.env.*
+
+
+backend/uploads/
+*.bin
