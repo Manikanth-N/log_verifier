@@ -17,7 +17,19 @@ class DiagnosticsEngine:
     BAT_VOLT_CRIT = 13.6
     MOTOR_IMBALANCE_WARN = 50  # PWM difference threshold
 
-    def analyze(self, log_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    # Parameter limits for limit checking
+    PARAMETER_LIMITS = {
+        "VIBE_MAX": {"min": 0, "max": 30.0, "unit": "m/s²", "desc": "Maximum acceptable vibration level"},
+        "BAT_MIN_VOLT": {"min": 13.0, "max": 16.8, "unit": "V", "desc": "Battery voltage range (4S LiPo)"},
+        "GPS_HDOP": {"min": 0, "max": 2.0, "unit": "", "desc": "GPS horizontal dilution of precision"},
+        "GPS_MIN_SATS": {"min": 8, "max": 30, "unit": "sats", "desc": "Minimum satellite count for navigation"},
+        "EKF_INNOV": {"min": 0, "max": 0.8, "unit": "", "desc": "EKF innovation threshold"},
+        "MOTOR_PWM_DIFF": {"min": 0, "max": 50, "unit": "PWM", "desc": "Maximum motor output imbalance"},
+        "ATT_ERR_MAX": {"min": 0, "max": 5.0, "unit": "°", "desc": "Maximum attitude error"},
+        "CURR_MAX": {"min": 0, "max": 50.0, "unit": "A", "desc": "Maximum current draw"},
+    }
+
+    def analyze(self, log_data: Dict[str, Any]) -> Dict[str, Any]:
         """Run all diagnostics and return results."""
         signals = log_data.get("signals", {})
         results = []
@@ -48,6 +60,9 @@ class DiagnosticsEngine:
         # Sort by severity (highest first)
         results.sort(key=lambda x: x["severity"], reverse=True)
 
+        # Get parameter limits
+        parameter_limits = self._check_parameter_limits(signals)
+
         return {
             "health_score": health_score,
             "total_checks": len(results),
@@ -55,7 +70,122 @@ class DiagnosticsEngine:
             "warnings": sum(1 for r in results if r["status"] == "warning"),
             "passed": sum(1 for r in results if r["status"] == "good"),
             "checks": results,
+            "parameter_limits": parameter_limits,
         }
+
+    def _check_parameter_limits(self, signals: Dict) -> List[Dict]:
+        """Check various parameters against recommended limits."""
+        limits = []
+
+        # Vibration limits
+        if "VIBE" in signals:
+            vibe = signals["VIBE"]
+            for axis in ["VibeX", "VibeY", "VibeZ"]:
+                if axis in vibe:
+                    max_val = float(np.max(vibe[axis]))
+                    status = "within" if max_val <= self.VIBE_WARN else ("warning" if max_val <= self.VIBE_CRIT else "exceeded")
+                    limits.append({
+                        "name": f"Vibration {axis[-1]}-axis (max)",
+                        "value": round(max_val, 2),
+                        "min_limit": 0,
+                        "max_limit": self.VIBE_WARN,
+                        "status": status,
+                        "unit": "m/s²",
+                        "description": f"Peak vibration on {axis[-1]}-axis"
+                    })
+
+        # Battery voltage limits
+        if "BAT" in signals and "Volt" in signals["BAT"]:
+            min_volt = float(np.min(signals["BAT"]["Volt"]))
+            status = "within" if min_volt >= self.BAT_VOLT_WARN else ("warning" if min_volt >= self.BAT_VOLT_CRIT else "exceeded")
+            limits.append({
+                "name": "Battery Voltage (min)",
+                "value": round(min_volt, 2),
+                "min_limit": self.BAT_VOLT_CRIT,
+                "max_limit": 16.8,
+                "status": status,
+                "unit": "V",
+                "description": "Minimum battery voltage during flight"
+            })
+
+        # GPS HDop limits
+        if "GPS" in signals and "HDop" in signals["GPS"]:
+            max_hdop = float(np.max(signals["GPS"]["HDop"]))
+            status = "within" if max_hdop <= self.GPS_HDOP_WARN else ("warning" if max_hdop <= self.GPS_HDOP_WARN * 2 else "exceeded")
+            limits.append({
+                "name": "GPS HDop (max)",
+                "value": round(max_hdop, 2),
+                "min_limit": 0,
+                "max_limit": self.GPS_HDOP_WARN,
+                "status": status,
+                "unit": "",
+                "description": "Maximum GPS horizontal dilution of precision"
+            })
+
+        # GPS satellite count
+        if "GPS" in signals and "NSats" in signals["GPS"]:
+            min_sats = int(np.min(signals["GPS"]["NSats"]))
+            status = "within" if min_sats >= self.GPS_SATS_WARN else "warning"
+            limits.append({
+                "name": "GPS Satellites (min)",
+                "value": min_sats,
+                "min_limit": self.GPS_SATS_WARN,
+                "max_limit": 30,
+                "status": status,
+                "unit": "sats",
+                "description": "Minimum satellite count during flight"
+            })
+
+        # EKF innovation limits
+        if "EKF" in signals:
+            for field in ["VN", "VE", "VD"]:
+                if field in signals["EKF"]:
+                    max_innov = float(np.max(np.abs(signals["EKF"][field])))
+                    status = "within" if max_innov <= self.EKF_INNOV_WARN else ("warning" if max_innov <= self.EKF_INNOV_CRIT else "exceeded")
+                    axis_name = {"VN": "North", "VE": "East", "VD": "Down"}[field]
+                    limits.append({
+                        "name": f"EKF Innovation {axis_name}",
+                        "value": round(max_innov, 3),
+                        "min_limit": 0,
+                        "max_limit": self.EKF_INNOV_WARN,
+                        "status": status,
+                        "unit": "",
+                        "description": f"Maximum EKF velocity innovation ({axis_name})"
+                    })
+
+        # Motor balance
+        if "RCOU" in signals:
+            motor_fields = [f for f in ["C1", "C2", "C3", "C4"] if f in signals["RCOU"]]
+            if len(motor_fields) >= 2:
+                motor_avgs = {mf: np.mean(signals["RCOU"][mf]) for mf in motor_fields}
+                overall_avg = np.mean(list(motor_avgs.values()))
+                max_diff = max(abs(v - overall_avg) for v in motor_avgs.values())
+                status = "within" if max_diff <= self.MOTOR_IMBALANCE_WARN else "warning"
+                limits.append({
+                    "name": "Motor Balance (diff)",
+                    "value": round(max_diff, 1),
+                    "min_limit": 0,
+                    "max_limit": self.MOTOR_IMBALANCE_WARN,
+                    "status": status,
+                    "unit": "PWM",
+                    "description": "Maximum motor output deviation from average"
+                })
+
+        # Current draw
+        if "BAT" in signals and "Curr" in signals["BAT"]:
+            max_curr = float(np.max(signals["BAT"]["Curr"]))
+            status = "within" if max_curr <= 40 else ("warning" if max_curr <= 60 else "exceeded")
+            limits.append({
+                "name": "Current Draw (max)",
+                "value": round(max_curr, 1),
+                "min_limit": 0,
+                "max_limit": 50.0,
+                "status": status,
+                "unit": "A",
+                "description": "Peak current draw during flight"
+            })
+
+        return limits
 
     def _check_vibration(self, vibe: Dict) -> List[Dict]:
         results = []
@@ -232,6 +362,24 @@ class DiagnosticsEngine:
                 "beginner_text": f"Battery {'is running low - charge or replace soon' if status != 'good' else 'level looks healthy'}.",
             })
 
+            # Voltage sag detection
+            if len(volts) > 20:
+                window = max(10, len(volts) // 20)
+                rolling_diff = np.array([volts[i] - volts[i + window] for i in range(len(volts) - window)])
+                max_sag = float(np.max(rolling_diff)) if len(rolling_diff) > 0 else 0
+                if max_sag > 1.0:
+                    results.append({
+                        "name": "Voltage Sag",
+                        "category": "power",
+                        "status": "critical" if max_sag > 2.0 else "warning",
+                        "severity": 7 if max_sag > 2.0 else 4,
+                        "value": round(max_sag, 2),
+                        "threshold": 1.0,
+                        "explanation": f"Voltage sag of {max_sag:.1f}V detected during high-current draw. Battery internal resistance may be high.",
+                        "fix": "Replace battery if internal resistance is too high. Reduce current draw or use higher C-rating battery.",
+                        "beginner_text": f"Your battery voltage dropped by {max_sag:.1f}V suddenly. The battery might be old or too small for your drone.",
+                    })
+
         return results
 
     def _check_motors(self, rcou: Dict) -> List[Dict]:
@@ -241,9 +389,11 @@ class DiagnosticsEngine:
             return results
 
         motor_avgs = {}
+        motor_maxs = {}
         for mf in motor_fields:
             vals = np.array(rcou[mf])
             motor_avgs[mf] = np.mean(vals)
+            motor_maxs[mf] = np.max(vals)
 
         overall_avg = np.mean(list(motor_avgs.values()))
         max_diff = max(abs(v - overall_avg) for v in motor_avgs.values())
@@ -275,6 +425,26 @@ class DiagnosticsEngine:
                 "fix": "No action needed.",
                 "beginner_text": "All motors are working evenly. Good!",
             })
+
+        # Motor saturation detection
+        SATURATION_THRESHOLD = 1950
+        for mf in motor_fields:
+            vals = np.array(rcou[mf])
+            sat_count = int(np.sum(vals >= SATURATION_THRESHOLD))
+            sat_pct = sat_count / len(vals) * 100
+            if sat_pct > 5:
+                motor_num = int(mf[1])
+                results.append({
+                    "name": f"Motor {motor_num} Saturation",
+                    "category": "motors",
+                    "status": "critical" if sat_pct > 20 else "warning",
+                    "severity": 8 if sat_pct > 20 else 5,
+                    "value": round(sat_pct, 1),
+                    "threshold": 5.0,
+                    "explanation": f"Motor {motor_num} reached saturation ({sat_pct:.1f}% of flight time at >{SATURATION_THRESHOLD} PWM). No headroom for stabilization.",
+                    "fix": f"Reduce weight, use larger propellers, or more powerful motors. Motor {motor_num} cannot provide more thrust.",
+                    "beginner_text": f"Motor {motor_num} was running at maximum power {sat_pct:.0f}% of the time. Your drone may be too heavy.",
+                })
 
         return results
 

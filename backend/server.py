@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException
+from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException, Query
 from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -15,6 +15,8 @@ from log_parser import LogParser, generate_demo_log
 from signal_processor import SignalProcessor
 from diagnostics_engine import DiagnosticsEngine
 from ai_insights import AIInsights
+from chart_generator import generate_multi_signal_chart, generate_all_report_charts
+from report_generator import generate_pdf_report, generate_html_report, generate_markdown_report
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -24,7 +26,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'ardupilot_analyzer')]
 
 
-app = FastAPI(title="ArduPilot Log Analyzer API")
+app = FastAPI(title="Vehicle Log Analyzer API")
 api_router = APIRouter(prefix="/api")
 
 # In-memory cache for parsed log data
@@ -59,10 +61,16 @@ class AIRequest(BaseModel):
     context: Optional[str] = None
 
 
+class ChartExportRequest(BaseModel):
+    signals: List[Dict[str, str]]
+    format: str = "png"
+    title: str = "Signal Plot"
+
+
 # --- Routes ---
 @api_router.get("/")
 async def root():
-    return {"message": "ArduPilot Log Analyzer API", "version": "1.0.0"}
+    return {"message": "Vehicle Log Analyzer API", "version": "1.0.0"}
 
 
 @api_router.post("/logs/demo")
@@ -286,6 +294,84 @@ async def export_data(log_id: str, message_type: str = "ATT"):
         content=csv_content,
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={message_type}_export.csv"},
+    )
+
+
+@api_router.get("/logs/{log_id}/report")
+async def generate_report(log_id: str, format: str = Query("pdf", enum=["pdf", "html", "md"])):
+    """Generate a comprehensive flight analysis report."""
+    if log_id not in log_data_cache:
+        raise HTTPException(404, "Log data not in cache")
+    
+    data = log_data_cache[log_id]
+    log_meta = await db.logs.find_one({"log_id": log_id}, {"_id": 0})
+    if not log_meta:
+        raise HTTPException(404, "Log metadata not found")
+    
+    # Run diagnostics
+    diagnostics = diagnostics_engine.analyze(data)
+    
+    # Generate charts for PDF/HTML
+    charts = {}
+    if format in ("pdf", "html"):
+        try:
+            charts = generate_all_report_charts(data["signals"])
+        except Exception as e:
+            logger.error(f"Chart generation failed: {e}")
+    
+    # Generate the report
+    if format == "pdf":
+        content = generate_pdf_report(log_meta, diagnostics, charts)
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=flight_report.pdf"},
+        )
+    elif format == "html":
+        content = generate_html_report(log_meta, diagnostics, charts)
+        return Response(
+            content=content.encode('utf-8'),
+            media_type="text/html",
+            headers={"Content-Disposition": "attachment; filename=flight_report.html"},
+        )
+    else:  # markdown
+        content = generate_markdown_report(log_meta, diagnostics)
+        return Response(
+            content=content.encode('utf-8'),
+            media_type="text/markdown",
+            headers={"Content-Disposition": "attachment; filename=flight_report.md"},
+        )
+
+
+@api_router.post("/logs/{log_id}/export-chart")
+async def export_chart(log_id: str, request: ChartExportRequest):
+    """Export a chart as PNG or SVG image."""
+    if log_id not in log_data_cache:
+        raise HTTPException(404, "Log data not in cache")
+    
+    data = log_data_cache[log_id]
+    signals = data["signals"]
+    
+    fmt = request.format.lower()
+    if fmt not in ("png", "svg"):
+        raise HTTPException(400, "Format must be 'png' or 'svg'")
+    
+    try:
+        chart_bytes = generate_multi_signal_chart(
+            signals,
+            request.signals,
+            title=request.title,
+            fmt=fmt,
+        )
+    except Exception as e:
+        logger.error(f"Chart export failed: {e}")
+        raise HTTPException(500, f"Chart generation failed: {str(e)}")
+    
+    content_type = "image/png" if fmt == "png" else "image/svg+xml"
+    return Response(
+        content=chart_bytes,
+        media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename=chart.{fmt}"},
     )
 
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, SafeAreaView,
+  ActivityIndicator, SafeAreaView, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState } from '../../components/AppContext';
 import PlotlyChart from '../../components/PlotlyChart';
+import * as FileSystem from 'expo-file-system';
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -83,6 +84,7 @@ export default function Analysis() {
   const [signalLoading, setSignalLoading] = useState(false);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentLogId) loadSignals();
@@ -154,6 +156,62 @@ export default function Analysis() {
     setExpandedTypes(newExpanded);
   };
 
+  const exportChart = async (format: 'png' | 'svg') => {
+    if (!currentLogId || selected.length === 0) {
+      Alert.alert('No Data', 'Please select signals to export');
+      return;
+    }
+
+    setExportLoading(format);
+    try {
+      const res = await fetch(`${API}/api/logs/${currentLogId}/export-chart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signals: selected,
+          format,
+          title: activePreset || 'Signal Plot',
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        Alert.alert('Error', `Export failed: ${errText}`);
+        setExportLoading(null);
+        return;
+      }
+
+      const blob = await res.blob();
+
+      if (Platform.OS === 'web') {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chart_${activePreset || 'signals'}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        Alert.alert('Success', `Chart exported as ${format.toUpperCase()}`);
+      } else {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = (reader.result as string).split(',')[1];
+          const filename = `chart_${Date.now()}.${format}`;
+          const fileUri = `${FileSystem.documentDirectory}${filename}`;
+          await FileSystem.writeAsStringAsync(fileUri, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          Alert.alert('Chart Exported', `Saved: ${filename}`);
+        };
+        reader.readAsDataURL(blob);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Export failed');
+    }
+    setExportLoading(null);
+  };
+
   const traces = plotData.map((d, i) => ({
     x: d.timestamps,
     y: d.values,
@@ -214,6 +272,45 @@ export default function Analysis() {
           <View style={styles.chartPlaceholder}>
             <Ionicons name="pulse-outline" size={40} color="#3F3F46" />
             <Text style={styles.chartLoadText}>Select signals or a preset to plot</Text>
+          </View>
+        )}
+
+        {/* Chart Export Buttons */}
+        {plotData.length > 0 && (
+          <View style={styles.exportSection}>
+            <Text style={styles.exportLabel}>Export Chart</Text>
+            <View style={styles.exportBtns}>
+              <TouchableOpacity
+                testID="export-png-btn"
+                style={styles.exportBtn}
+                onPress={() => exportChart('png')}
+                disabled={exportLoading !== null}
+              >
+                {exportLoading === 'png' ? (
+                  <ActivityIndicator color="#007AFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="image-outline" size={16} color="#007AFF" />
+                    <Text style={styles.exportBtnText}>PNG</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="export-svg-btn"
+                style={styles.exportBtn}
+                onPress={() => exportChart('svg')}
+                disabled={exportLoading !== null}
+              >
+                {exportLoading === 'svg' ? (
+                  <ActivityIndicator color="#00FF88" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="shapes-outline" size={16} color="#00FF88" />
+                    <Text style={styles.exportBtnText}>SVG</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -287,6 +384,14 @@ const styles = StyleSheet.create({
   presetTextActive: { color: '#007AFF' },
   chartPlaceholder: { height: 350, backgroundColor: '#0A0A0A', borderRadius: 8, borderWidth: 1, borderColor: '#27272A', justifyContent: 'center', alignItems: 'center' },
   chartLoadText: { color: '#52525B', fontSize: 13, marginTop: 8 },
+  
+  // Export Section
+  exportSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#27272A', borderRadius: 10, padding: 12, marginTop: 12 },
+  exportLabel: { color: '#A1A1AA', fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  exportBtns: { flexDirection: 'row', gap: 8 },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#171717', borderWidth: 1, borderColor: '#27272A', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, gap: 4 },
+  exportBtnText: { color: '#A1A1AA', fontSize: 11, fontWeight: '600' },
+  
   dataInfo: { color: '#52525B', fontSize: 11, marginTop: 8, textAlign: 'right' },
   treeGroup: { marginBottom: 4 },
   treeHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, gap: 6 },
