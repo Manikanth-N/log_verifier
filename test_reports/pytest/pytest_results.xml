@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="30" time="82.194" timestamp="2026-03-14T12:53:48.651521+00:00" hostname="agent-env-978f1832-c457-4cff-8313-5553fba3cb2d"><testcase classname="tests.test_api_core.TestAPIHealth" name="test_api_root" time="0.277" /><testcase classname="tests.test_api_core.TestLogManagement" name="test_create_demo_log" time="0.079" /><testcase classname="tests.test_api_core.TestLogManagement" name="test_list_logs" time="0.144" /><testcase classname="tests.test_api_core.TestLogManagement" name="test_get_log_by_id" time="0.057" /><testcase classname="tests.test_api_core.TestLogManagement" name="test_get_nonexistent_log" time="0.059" /><testcase classname="tests.test_api_core.TestLogManagement" name="test_delete_log" time="0.191" /><testcase classname="tests.test_diagnostics_ai.TestDiagnostics" name="test_diagnostics_basic" time="0.061" /><testcase classname="tests.test_diagnostics_ai.TestDiagnostics" name="test_diagnostics_check_structure" time="0.070" /><testcase classname="tests.test_diagnostics_ai.TestDiagnostics" name="test_diagnostics_categories" time="0.060" /><testcase classname="tests.test_diagnostics_ai.TestDiagnostics" name="test_diagnostics_nonexistent_log" time="0.057" /><testcase classname="tests.test_diagnostics_ai.TestAIInsights" name="test_ai_insights_basic" time="38.735" /><testcase classname="tests.test_diagnostics_ai.TestAIInsights" name="test_ai_insights_with_context" time="40.038" /><testcase classname="tests.test_diagnostics_ai.TestAIInsights" name="test_ai_insights_nonexistent_log" time="0.011"><failure message="requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1395: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:325: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:294: in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+E   http.client.RemoteDisconnected: Remote end closed connection without response
+
+During handling of the above exception, another exception occurred:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:644: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1395: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:325: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:294: in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+During handling of the above exception, another exception occurred:
+tests/test_diagnostics_ai.py:133: in test_ai_insights_nonexistent_log
+    response = api_client.post(f"{base_url}/api/logs/{fake_id}/ai-insights", json=payload)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:637: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:659: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))</failure></testcase><testcase classname="tests.test_export.TestExport" name="test_export_csv_basic" time="0.425"><failure message="AssertionError: Wrong content type&#10;assert 'text/csv; charset=utf-8' == 'text/csv'&#10;  &#10;  - text/csv&#10;  + text/csv; charset=utf-8">tests/test_export.py:19: in test_export_csv_basic
+    assert response.headers.get("Content-Type") == "text/csv", "Wrong content type"
+E   AssertionError: Wrong content type
+E   assert 'text/csv; charset=utf-8' == 'text/csv'
+E     
+E     - text/csv
+E     + text/csv; charset=utf-8</failure></testcase><testcase classname="tests.test_export.TestExport" name="test_export_different_message_types" time="0.381" /><testcase classname="tests.test_export.TestExport" name="test_export_invalid_message_type" time="0.061" /><testcase classname="tests.test_export.TestExport" name="test_export_nonexistent_log" time="0.055" /><testcase classname="tests.test_export.TestExport" name="test_export_default_message_type" time="0.139" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_basic" time="0.092" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_peak_detection" time="0.098" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_spectrogram" time="0.068" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_different_signals" time="0.236" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_invalid_signal" time="0.053" /><testcase classname="tests.test_fft.TestFFTAnalysis" name="test_fft_nonexistent_log" time="0.057" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signals_tree" time="0.056" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signal_data_single" time="0.088" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signal_data_multiple" time="0.167" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signal_data_downsampling" time="0.061" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signal_data_time_range" time="0.061" /><testcase classname="tests.test_signal_processing.TestSignalRetrieval" name="test_get_signal_nonexistent_log" time="0.054" /></testsuite></testsuites>
