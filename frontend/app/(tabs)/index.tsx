@@ -35,11 +35,11 @@ export default function Dashboard() {
 
   const fetchLogs = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/logs`);
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data);
-      }
+      const keys = await AsyncStorage.getAllKeys();
+      const logKeys = keys.filter(k => k.startsWith('log_'));
+      const logData = await AsyncStorage.multiGet(logKeys);
+      const parsedLogs = logData.map(([key, value]) => JSON.parse(value || '{}'));
+      setLogs(parsedLogs);
     } catch (e) {
       console.error('Failed to fetch logs:', e);
     }
@@ -52,19 +52,25 @@ export default function Dashboard() {
     setUploadProgress({ isUploading: true, progress: 0, status: 'Generating demo flight data...' });
     try {
       setUploadProgress({ isUploading: true, progress: 30, status: 'Processing signals...' });
-      const res = await fetch(`${API}/api/logs/demo`, { method: 'POST' });
+      const logData = await NativeAnalysis.generateDemoLog(120);
       setUploadProgress({ isUploading: true, progress: 80, status: 'Finalizing...' });
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentLogId(data.log_id);
-        setCurrentLogName(data.filename);
-        await fetchLogs();
-        setUploadProgress({ isUploading: false, progress: 100, status: 'Demo loaded successfully!' });
-      } else {
-        setUploadProgress({ isUploading: false, progress: 0, status: 'Failed to generate demo' });
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Failed to generate demo log');
+      
+      await AsyncStorage.setItem(`log_${logData.log_id}`, JSON.stringify({
+        log_id: logData.log_id,
+        filename: logData.filename,
+        upload_date: new Date().toISOString(),
+        duration_sec: logData.duration_sec,
+        message_types: logData.message_types,
+        is_demo: true,
+        signals: logData.signals,
+      }));
+      
+      setCurrentLogId(logData.log_id);
+      setCurrentLogName(logData.filename);
+      await fetchLogs();
+      setUploadProgress({ isUploading: false, progress: 100, status: 'Demo loaded successfully!' });
+    } catch (e: any) {
+      Alert.alert('Error', `Failed to generate demo log: ${e.message}`);
       setUploadProgress({ isUploading: false, progress: 0, status: '' });
     }
     setTimeout(() => setUploadProgress({ isUploading: false, progress: 0, status: '' }), 2000);
