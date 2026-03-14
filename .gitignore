@@ -125,3 +125,7 @@ frontend/android/gradle/wrapper/gradle-wrapper.jar
 
 # Yarn lock (optional, can be included if needed)
 # yarn.lock
+-e 
+# Environment files
+*.env
+*.env.*
