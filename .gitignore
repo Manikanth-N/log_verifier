@@ -133,3 +133,7 @@ frontend/android/gradle/wrapper/gradle-wrapper.jar
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
