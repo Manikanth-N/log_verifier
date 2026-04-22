@@ -154,8 +154,8 @@ export interface SignalDataResult {
 // ==================== Native Module ====================
 
 const LINKING_ERROR =
-  `The package 'AnalysisBridge' doesn't seem to be linked. Make sure: \n\n` +
-  Platform.select({ ios: \"- Run 'pod install'\", default: '' }) +
+  'The package "AnalysisBridge" doesn\'t seem to be linked. Make sure:\n\n' +
+  Platform.select({ ios: '- Run pod install\n', default: '' }) +
   '- Rebuild the app: npx react-native run-android';
 
 const AnalysisBridge: AnalysisBridgeInterface = NativeModules.AnalysisBridge
