@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState } from '../../components/AppContext';
 import PlotlyChart from '../../components/PlotlyChart';
+import { TemplateSelector, Template, TEMPLATES } from '../../components/AnalysisTemplates';
 import * as FileSystem from 'expo-file-system';
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -76,7 +77,7 @@ interface PlotData {
 }
 
 export default function Analysis() {
-  const { currentLogId, mode } = useAppState();
+  const { currentLogId, verificationMode } = useAppState();
   const [signals, setSignals] = useState<SignalTree>({});
   const [selected, setSelected] = useState<{ type: string; field: string }[]>([]);
   const [plotData, setPlotData] = useState<PlotData[]>([]);
@@ -84,6 +85,7 @@ export default function Analysis() {
   const [signalLoading, setSignalLoading] = useState(false);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [exportLoading, setExportLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -108,9 +110,23 @@ export default function Analysis() {
 
   const loadPreset = async (presetName: string) => {
     setActivePreset(presetName);
+    setSelectedTemplate(null); // Clear template when using preset
     const presetSignals = PRESETS[presetName];
     setSelected(presetSignals);
     await fetchData(presetSignals);
+  };
+
+  const loadTemplate = async (template: Template) => {
+    setSelectedTemplate(template);
+    setActivePreset(null); // Clear preset when using template
+    
+    // Flatten all signals from all plots in the template
+    const templateSignals = template.plots.flatMap(plot => 
+      plot.signals.map(sig => ({ type: sig.type, field: sig.field }))
+    );
+    
+    setSelected(templateSignals);
+    await fetchData(templateSignals);
   };
 
   const toggleSignal = (type: string, field: string) => {
@@ -238,6 +254,13 @@ export default function Analysis() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Signal Analysis</Text>
 
+        {/* Enhanced Template Selector (review.px4.io style) */}
+        <TemplateSelector
+          selectedTemplate={selectedTemplate}
+          onSelectTemplate={loadTemplate}
+          availableSignals={Object.keys(signals)}
+        />
+
         {/* Quick Presets */}
         <Text style={styles.sectionLabel}>Quick Presets</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetsRow}>
@@ -265,7 +288,7 @@ export default function Analysis() {
           <PlotlyChart
             testID="analysis-chart"
             traces={traces}
-            layout={{ title: activePreset || 'Signal Plot' }}
+            layout={{ title: selectedTemplate?.name || activePreset || 'Signal Plot' }}
             height={350}
           />
         ) : (
