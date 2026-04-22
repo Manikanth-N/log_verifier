@@ -211,6 +211,34 @@ public class AnalysisBridgeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    @ReactMethod
+    public void verifyLog(String logPath, String pubkeyPath, String mode, Promise promise) {
+        new Thread(() -> {
+            try {
+                // Import the security module
+                PyObject securityModule = python.getModule("analysis_engine.security.log_verifier");
+                PyObject verifierClass = securityModule.get("SecureLogVerifier");
+                PyObject verifier = verifierClass.call();
+                
+                // Call verify_log with the mode parameter
+                PyObject result;
+                if (pubkeyPath != null && !pubkeyPath.isEmpty()) {
+                    result = verifier.callAttr("verify_log", logPath, pubkeyPath, mode);
+                } else {
+                    result = verifier.callAttr("verify_log", logPath, (Object) null, mode);
+                }
+                
+                // Convert result to dict and then to WritableMap
+                PyObject resultDict = result.callAttr("to_dict");
+                WritableMap resultMap = pyObjectToWritableMap(resultDict);
+                promise.resolve(resultMap);
+            } catch (Exception e) {
+                Log.e(TAG, "verifyLog failed", e);
+                promise.reject("VERIFY_ERROR", e.getMessage(), e);
+            }
+        }).start();
+    }
+
     // ==================== Helper Methods ====================
 
     private PyObject readableMapToPyObject(ReadableMap map) {

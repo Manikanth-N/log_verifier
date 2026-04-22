@@ -32,6 +32,9 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [verificationMode, setVerificationMode] = useState<'beginner' | 'pro' | 'certified'>('pro');
+  const [publicKeyPath, setPublicKeyPath] = useState<string | null>(null);
+  const [publicKeyName, setPublicKeyName] = useState<string>('');
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -163,6 +166,23 @@ export default function Dashboard() {
     } catch {}
   };
 
+  const pickPublicKey = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      
+      const file = result.assets[0];
+      setPublicKeyPath(file.uri);
+      setPublicKeyName(file.name);
+      Alert.alert('Public Key Selected', file.name);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to select public key');
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes === 0) return 'Demo';
     if (bytes < 1024) return `${bytes} B`;
@@ -199,6 +219,105 @@ export default function Dashboard() {
               {mode === 'beginner' ? 'BEGINNER' : 'PRO'}
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Verification Mode Selector */}
+        <View style={styles.verificationCard}>
+          <Text style={styles.analysisLabel}>Verification Level</Text>
+          <View style={styles.segmentedControl}>
+            <TouchableOpacity
+              testID="beginner-mode-btn"
+              style={[
+                styles.segmentBtn,
+                styles.segmentBtnLeft,
+                verificationMode === 'beginner' && styles.segmentBtnActive,
+              ]}
+              onPress={() => setVerificationMode('beginner')}
+            >
+              <Ionicons
+                name="school-outline"
+                size={14}
+                color={verificationMode === 'beginner' ? '#FFF' : '#A1A1AA'}
+              />
+              <Text style={[
+                styles.segmentText,
+                verificationMode === 'beginner' && styles.segmentTextActive,
+              ]}>Beginner</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="pro-mode-btn"
+              style={[
+                styles.segmentBtn,
+                verificationMode === 'pro' && styles.segmentBtnActive,
+              ]}
+              onPress={() => setVerificationMode('pro')}
+            >
+              <Ionicons
+                name="construct-outline"
+                size={14}
+                color={verificationMode === 'pro' ? '#FFF' : '#A1A1AA'}
+              />
+              <Text style={[
+                styles.segmentText,
+                verificationMode === 'pro' && styles.segmentTextActive,
+              ]}>Pro</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="certified-mode-btn"
+              style={[
+                styles.segmentBtn,
+                styles.segmentBtnRight,
+                verificationMode === 'certified' && styles.segmentBtnCertified,
+              ]}
+              onPress={() => setVerificationMode('certified')}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={14}
+                color={verificationMode === 'certified' ? '#000' : '#FFD700'}
+              />
+              <Text style={[
+                styles.segmentText,
+                verificationMode === 'certified' && styles.segmentTextCertified,
+              ]}>Certified</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.verificationHint}>
+            {verificationMode === 'beginner'
+              ? 'Basic parsing with no cryptographic verification'
+              : verificationMode === 'pro'
+              ? 'Full analysis with FFT & motor harmonics (no signature check)'
+              : 'DGCA CS-UAS Clause 7.1 compliant · Ed25519 + Blake2b verification'}
+          </Text>
+
+          {/* Public Key Picker - Only shown in Certified mode */}
+          {verificationMode === 'certified' && (
+            <View style={styles.publicKeySection}>
+              <TouchableOpacity
+                testID="pick-pubkey-btn"
+                style={styles.pubkeyBtn}
+                onPress={pickPublicKey}
+              >
+                <Ionicons name="key-outline" size={16} color="#FFD700" />
+                <Text style={styles.pubkeyBtnText}>
+                  {publicKeyPath ? 'Change Public Key' : 'Select Public Key (.dat)'}
+                </Text>
+              </TouchableOpacity>
+              {publicKeyPath && (
+                <View style={styles.pubkeySelected}>
+                  <Ionicons name="checkmark-circle" size={14} color="#00FF88" />
+                  <Text style={styles.pubkeyFileName} numberOfLines={1}>
+                    {publicKeyName}
+                  </Text>
+                </View>
+              )}
+              {verificationMode === 'certified' && !publicKeyPath && (
+                <Text style={styles.pubkeyWarning}>
+                  ⚠️ Public key required for certified verification
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Analysis Type Toggle */}
@@ -427,6 +546,25 @@ const styles = StyleSheet.create({
   toggleText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
   toggleTextActive: { color: '#FFF' },
   analysisHint: { color: '#52525B', fontSize: 11, marginTop: 10, lineHeight: 16 },
+  
+  // Verification Mode
+  verificationCard: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#27272A', borderRadius: 12, padding: 14, marginBottom: 16 },
+  segmentedControl: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden' },
+  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#171717', borderWidth: 1, borderColor: '#27272A', paddingVertical: 10, gap: 4 },
+  segmentBtnLeft: { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  segmentBtnRight: { borderTopRightRadius: 8, borderBottomRightRadius: 8 },
+  segmentBtnActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  segmentBtnCertified: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  segmentText: { color: '#A1A1AA', fontSize: 11, fontWeight: '600' },
+  segmentTextActive: { color: '#FFF' },
+  segmentTextCertified: { color: '#000', fontWeight: '700' },
+  verificationHint: { color: '#52525B', fontSize: 11, marginTop: 10, lineHeight: 16 },
+  publicKeySection: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#27272A' },
+  pubkeyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,215,0,0.1)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.3)', borderRadius: 8, paddingVertical: 10, gap: 8 },
+  pubkeyBtnText: { color: '#FFD700', fontSize: 13, fontWeight: '600' },
+  pubkeySelected: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
+  pubkeyFileName: { color: '#00FF88', fontSize: 12, flex: 1 },
+  pubkeyWarning: { color: '#FF6B6B', fontSize: 11, marginTop: 8 },
   
   // Progress
   progressCard: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#007AFF', borderRadius: 12, padding: 14, marginBottom: 16 },

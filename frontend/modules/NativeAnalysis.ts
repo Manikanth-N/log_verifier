@@ -19,6 +19,7 @@ interface AnalysisBridgeInterface {
   exportCSV(signalData: Record<string, any>): Promise<string>;
   generateReport(logData: Record<string, any>, diagnostics: Record<string, any>, format: 'pdf' | 'html' | 'md'): Promise<string>;
   getVersion(): Promise<string>;
+  verifyLog(logPath: string, pubkeyPath: string | null, mode: string): Promise<VerificationResult>;
 }
 
 // ==================== Type Definitions ====================
@@ -151,6 +152,18 @@ export interface SignalDataResult {
   unit?: string;
 }
 
+export interface VerificationResult {
+  status: 'pass' | 'fail' | 'unsigned';
+  hash_chain_valid: boolean;
+  signature_valid: boolean;
+  device_bound: boolean;
+  algorithm: string | null;
+  error_message: string | null;
+  chunks_verified: number;
+  total_chunks: number;
+  compliance_level: 'beginner' | 'pro' | 'certified';
+}
+
 // ==================== Native Module ====================
 
 const LINKING_ERROR =
@@ -276,6 +289,21 @@ export class NativeAnalysis {
    */
   static async getVersion(): Promise<string> {
     return await AnalysisBridge.getVersion();
+  }
+
+  /**
+   * Verify a secure log file (DGCA CS-UAS Clause 7.1 compliant)
+   * @param logPath Path to the .BIN log file
+   * @param pubkeyPath Path to the Ed25519 public key file (.dat) - required for 'certified' mode
+   * @param mode 'beginner' | 'pro' | 'certified'
+   * @returns VerificationResult with cryptographic verification status
+   */
+  static async verifyLog(
+    logPath: string,
+    pubkeyPath: string | null,
+    mode: 'beginner' | 'pro' | 'certified' = 'pro'
+  ): Promise<VerificationResult> {
+    return await AnalysisBridge.verifyLog(logPath, pubkeyPath, mode);
   }
 }
 
