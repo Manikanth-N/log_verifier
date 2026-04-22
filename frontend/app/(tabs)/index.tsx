@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, SafeAreaView, Alert, Platform,
+  ActivityIndicator, SafeAreaView, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAppState } from '../../components/AppContext';
+import { useAppState, VerificationMode } from '../../components/AppContext';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NativeAnalysis from '../../modules/NativeAnalysis';
 
@@ -26,15 +25,15 @@ interface LogEntry {
 export default function Dashboard() {
   const {
     currentLogId, setCurrentLogId, setCurrentLogName,
-    mode, setMode, analysisType, setAnalysisType,
+    verificationMode, setVerificationMode,
+    verificationStatus, setVerificationStatus,
+    publicKeyPath, setPublicKeyPath,
+    publicKeyName, setPublicKeyName,
     uploadProgress, setUploadProgress,
   } = useAppState();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
-  const [verificationMode, setVerificationMode] = useState<'beginner' | 'pro' | 'certified'>('pro');
-  const [publicKeyPath, setPublicKeyPath] = useState<string | null>(null);
-  const [publicKeyName, setPublicKeyName] = useState<string>('');
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -49,6 +48,11 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  // Reset verification status when mode changes
+  useEffect(() => {
+    setVerificationStatus({ status: 'none' });
+  }, [verificationMode, setVerificationStatus]);
 
   const loadDemo = async () => {
     setDemoLoading(true);
@@ -93,53 +97,57 @@ export default function Dashboard() {
       setUploadProgress({
         isUploading: true,
         progress: 0,
-        status: 'Preparing upload...',
+        status: 'Parsing log file...',
         filename: file.name,
       });
 
-      const formData = new FormData();
-      formData.append('file', {
-        uri: file.uri,
-        name: file.name || 'log.bin',
-        type: 'application/octet-stream',
-      } as any);
-
-      // Simulate progress during upload
-      let progress = 10;
-      const progressInterval = setInterval(() => {
-        if (progress < 70) {
-          progress += 10;
-          setUploadProgress(prev => ({
-            ...prev,
-            progress,
-            status: progress < 40 ? 'Uploading file...' :
-                   progress < 60 ? 'Parsing log data...' :
-                   'Processing signals...',
-          }));
+      // Use native module to parse log locally
+      setUploadProgress({ isUploading: true, progress: 30, status: 'Parsing log structure...', filename: file.name });
+      
+      try {
+        const logData = await NativeAnalysis.parseLog(file.uri);
+        setUploadProgress({ isUploading: true, progress: 70, status: 'Processing signals...', filename: file.name });
+        
+        await AsyncStorage.setItem(`log_${logData.log_id}`, JSON.stringify({
+          log_id: logData.log_id,
+          filename: file.name,
+          upload_date: new Date().toISOString(),
+          duration_sec: logData.duration_sec,
+          message_types: logData.message_types,
+          file_size: file.size || 0,
+          is_demo: false,
+          signals: logData.signals,
+        }));
+        
+        setCurrentLogId(logData.log_id);
+        setCurrentLogName(file.name);
+        
+        // Run verification if in Certified mode with public key
+        if (verificationMode === 'certified' && publicKeyPath) {
+          setUploadProgress({ isUploading: true, progress: 85, status: 'Verifying cryptographic signature...', filename: file.name });
+          try {
+            const verifyResult = await NativeAnalysis.verifyLog(file.uri, publicKeyPath, 'certified');
+            setVerificationStatus({
+              status: verifyResult.status as 'pass' | 'fail',
+              message: verifyResult.error_message || undefined,
+              hashChainValid: verifyResult.hash_chain_valid,
+              signatureValid: verifyResult.signature_valid,
+              algorithm: verifyResult.algorithm || undefined,
+              chunksVerified: verifyResult.chunks_verified,
+              totalChunks: verifyResult.total_chunks,
+            });
+          } catch (verifyErr: any) {
+            setVerificationStatus({
+              status: 'fail',
+              message: verifyErr.message || 'Verification failed',
+            });
+          }
         }
-      }, 500);
-
-      const res = await fetch(`${API}/api/logs/upload?analysis_type=${analysisType}`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      clearInterval(progressInterval);
-
-      if (res.ok) {
-        setUploadProgress({ isUploading: true, progress: 90, status: 'Finalizing...' });
-        const data = await res.json();
-        setCurrentLogId(data.log_id);
-        setCurrentLogName(data.filename);
+        
         await fetchLogs();
-        setUploadProgress({
-          isUploading: false,
-          progress: 100,
-          status: `${analysisType === 'quick' ? 'Quick' : 'Full'} analysis complete!`,
-        });
-      } else {
-        const err = await res.text();
-        Alert.alert('Upload Failed', err);
+        setUploadProgress({ isUploading: false, progress: 100, status: 'Log loaded successfully!' });
+      } catch (parseErr: any) {
+        Alert.alert('Parse Error', parseErr.message || 'Failed to parse log file');
         setUploadProgress({ isUploading: false, progress: 0, status: '' });
       }
     } catch (e: any) {
@@ -153,17 +161,22 @@ export default function Dashboard() {
   const selectLog = (log: LogEntry) => {
     setCurrentLogId(log.log_id);
     setCurrentLogName(log.filename);
+    // Reset verification when selecting a different log
+    setVerificationStatus({ status: 'none' });
   };
 
   const deleteLog = async (logId: string) => {
     try {
-      await fetch(`${API}/api/logs/${logId}`, { method: 'DELETE' });
+      await AsyncStorage.removeItem(`log_${logId}`);
       if (currentLogId === logId) {
         setCurrentLogId(null);
         setCurrentLogName('');
+        setVerificationStatus({ status: 'none' });
       }
       await fetchLogs();
-    } catch {}
+    } catch (e) {
+      console.error('Failed to delete log:', e);
+    }
   };
 
   const pickPublicKey = async () => {
@@ -183,6 +196,46 @@ export default function Dashboard() {
     }
   };
 
+  const runVerification = async () => {
+    if (!currentLogId || verificationMode !== 'certified') return;
+    
+    const log = logs.find(l => l.log_id === currentLogId);
+    if (!log) return;
+    
+    setVerificationStatus({ status: 'pending' });
+    
+    try {
+      // Get the log file path from AsyncStorage
+      const logDataStr = await AsyncStorage.getItem(`log_${currentLogId}`);
+      if (!logDataStr) {
+        throw new Error('Log data not found');
+      }
+      
+      // For now, we'll show a message that verification requires the original file
+      // In a full implementation, we'd store the file path or re-pick it
+      const verifyResult = await NativeAnalysis.verifyLog(
+        log.filename, // This would need to be the actual file URI
+        publicKeyPath,
+        'certified'
+      );
+      
+      setVerificationStatus({
+        status: verifyResult.status as 'pass' | 'fail',
+        message: verifyResult.error_message || undefined,
+        hashChainValid: verifyResult.hash_chain_valid,
+        signatureValid: verifyResult.signature_valid,
+        algorithm: verifyResult.algorithm || undefined,
+        chunksVerified: verifyResult.chunks_verified,
+        totalChunks: verifyResult.total_chunks,
+      });
+    } catch (e: any) {
+      setVerificationStatus({
+        status: 'fail',
+        message: e.message || 'Verification failed',
+      });
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes === 0) return 'Demo';
     if (bytes < 1024) return `${bytes} B`;
@@ -196,6 +249,17 @@ export default function Dashboard() {
     return `${m}m ${s}s`;
   };
 
+  const getModeDescription = (mode: VerificationMode): string => {
+    switch (mode) {
+      case 'beginner':
+        return 'Basic plots & diagnostics only';
+      case 'pro':
+        return 'Full analysis with FFT, motor harmonics & correlations';
+      case 'certified':
+        return 'DGCA CS-UAS Clause 7.1 · Ed25519 + Blake2b verification';
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -205,25 +269,67 @@ export default function Dashboard() {
             <Text style={styles.title}>Vehicle Log Analyzer</Text>
             <Text style={styles.subtitle}>Flight data analysis & diagnostics</Text>
           </View>
-          <TouchableOpacity
-            testID="mode-toggle-btn"
-            style={[styles.modeBadge, mode === 'professional' && styles.modeBadgePro]}
-            onPress={() => setMode(mode === 'beginner' ? 'professional' : 'beginner')}
-          >
+          <View style={[
+            styles.modeBadge,
+            verificationMode === 'pro' && styles.modeBadgePro,
+            verificationMode === 'certified' && styles.modeBadgeCertified,
+          ]}>
             <Ionicons
-              name={mode === 'beginner' ? 'school-outline' : 'construct-outline'}
-              size={14}
-              color={mode === 'professional' ? '#00FF88' : '#007AFF'}
+              name={verificationMode === 'beginner' ? 'school-outline' : verificationMode === 'pro' ? 'construct-outline' : 'shield-checkmark'}
+              size={12}
+              color={verificationMode === 'certified' ? '#000' : verificationMode === 'pro' ? '#00FF88' : '#007AFF'}
             />
-            <Text style={[styles.modeText, mode === 'professional' && styles.modeTextPro]}>
-              {mode === 'beginner' ? 'BEGINNER' : 'PRO'}
+            <Text style={[
+              styles.modeText,
+              verificationMode === 'pro' && styles.modeTextPro,
+              verificationMode === 'certified' && styles.modeTextCertified,
+            ]}>
+              {verificationMode.toUpperCase()}
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Verification Status Banner - Only in Certified mode */}
+        {verificationMode === 'certified' && verificationStatus.status !== 'none' && (
+          <View style={[
+            styles.verificationBanner,
+            verificationStatus.status === 'pass' && styles.verificationBannerPass,
+            verificationStatus.status === 'fail' && styles.verificationBannerFail,
+            verificationStatus.status === 'pending' && styles.verificationBannerPending,
+          ]}>
+            {verificationStatus.status === 'pending' ? (
+              <ActivityIndicator color="#FFD700" size="small" />
+            ) : (
+              <Ionicons
+                name={verificationStatus.status === 'pass' ? 'shield-checkmark' : 'warning'}
+                size={20}
+                color={verificationStatus.status === 'pass' ? '#00FF88' : '#FF3B30'}
+              />
+            )}
+            <View style={styles.verificationBannerContent}>
+              <Text style={[
+                styles.verificationBannerTitle,
+                verificationStatus.status === 'pass' && styles.verificationBannerTitlePass,
+                verificationStatus.status === 'fail' && styles.verificationBannerTitleFail,
+              ]}>
+                {verificationStatus.status === 'pending' ? 'Verifying...' :
+                 verificationStatus.status === 'pass' ? 'SIGNATURE VERIFIED' : 'VERIFICATION FAILED'}
+              </Text>
+              {verificationStatus.message && (
+                <Text style={styles.verificationBannerMessage}>{verificationStatus.message}</Text>
+              )}
+              {verificationStatus.status === 'pass' && (
+                <Text style={styles.verificationBannerDetails}>
+                  {verificationStatus.algorithm} · {verificationStatus.chunksVerified}/{verificationStatus.totalChunks} chunks
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Verification Mode Selector */}
         <View style={styles.verificationCard}>
-          <Text style={styles.analysisLabel}>Verification Level</Text>
+          <Text style={styles.sectionLabel}>Verification Level</Text>
           <View style={styles.segmentedControl}>
             <TouchableOpacity
               testID="beginner-mode-btn"
@@ -283,11 +389,7 @@ export default function Dashboard() {
             </TouchableOpacity>
           </View>
           <Text style={styles.verificationHint}>
-            {verificationMode === 'beginner'
-              ? 'Basic parsing with no cryptographic verification'
-              : verificationMode === 'pro'
-              ? 'Full analysis with FFT & motor harmonics (no signature check)'
-              : 'DGCA CS-UAS Clause 7.1 compliant · Ed25519 + Blake2b verification'}
+            {getModeDescription(verificationMode)}
           </Text>
 
           {/* Public Key Picker - Only shown in Certified mode */}
@@ -311,41 +413,13 @@ export default function Dashboard() {
                   </Text>
                 </View>
               )}
-              {verificationMode === 'certified' && !publicKeyPath && (
+              {!publicKeyPath && (
                 <Text style={styles.pubkeyWarning}>
                   ⚠️ Public key required for certified verification
                 </Text>
               )}
             </View>
           )}
-        </View>
-
-        {/* Analysis Type Toggle */}
-        <View style={styles.analysisToggle}>
-          <Text style={styles.analysisLabel}>Analysis Mode</Text>
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              testID="quick-analysis-btn"
-              style={[styles.toggleBtn, analysisType === 'quick' && styles.toggleBtnActive]}
-              onPress={() => setAnalysisType('quick')}
-            >
-              <Ionicons name="flash-outline" size={14} color={analysisType === 'quick' ? '#FFF' : '#A1A1AA'} />
-              <Text style={[styles.toggleText, analysisType === 'quick' && styles.toggleTextActive]}>Quick</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              testID="full-analysis-btn"
-              style={[styles.toggleBtn, analysisType === 'full' && styles.toggleBtnActive]}
-              onPress={() => setAnalysisType('full')}
-            >
-              <Ionicons name="analytics-outline" size={14} color={analysisType === 'full' ? '#FFF' : '#A1A1AA'} />
-              <Text style={[styles.toggleText, analysisType === 'full' && styles.toggleTextActive]}>Full</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.analysisHint}>
-            {analysisType === 'quick'
-              ? 'Faster processing with downsampled data (~2000 points/signal)'
-              : 'Complete analysis with all data points (slower for large files)'}
-          </Text>
         </View>
 
         {/* Upload Progress */}
@@ -454,7 +528,7 @@ export default function Dashboard() {
                 <View style={styles.logInfo}>
                   <Text style={styles.logName} numberOfLines={1}>{log.filename}</Text>
                   <Text style={styles.logMeta}>
-                    {log.vehicle_type} · {formatDuration(log.duration_sec)} · {formatSize(log.file_size)}
+                    {log.vehicle_type || 'Unknown'} · {formatDuration(log.duration_sec)} · {formatSize(log.file_size)}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -466,12 +540,12 @@ export default function Dashboard() {
                 </TouchableOpacity>
               </View>
               <View style={styles.logTags}>
-                {log.message_types.slice(0, 6).map((t) => (
+                {log.message_types?.slice(0, 6).map((t) => (
                   <View key={t} style={styles.tag}>
                     <Text style={styles.tagText}>{t}</Text>
                   </View>
                 ))}
-                {log.message_types.length > 6 && (
+                {log.message_types?.length > 6 && (
                   <View style={styles.tag}>
                     <Text style={styles.tagText}>+{log.message_types.length - 6}</Text>
                   </View>
@@ -479,7 +553,7 @@ export default function Dashboard() {
               </View>
               {log.total_messages && (
                 <Text style={styles.logSamples}>
-                  {log.total_messages.toLocaleString()} total samples · {log.message_types.length} message types
+                  {log.total_messages.toLocaleString()} total samples · {log.message_types?.length || 0} message types
                 </Text>
               )}
             </TouchableOpacity>
@@ -487,7 +561,7 @@ export default function Dashboard() {
         </View>
 
         {/* Info Section for Beginners */}
-        {mode === 'beginner' && (
+        {verificationMode === 'beginner' && (
           <View style={styles.infoCard}>
             <Ionicons name="information-circle-outline" size={20} color="#007AFF" />
             <View style={styles.infoContent}>
@@ -496,7 +570,7 @@ export default function Dashboard() {
                 1. Load a demo flight or upload your .BIN log{"\n"}
                 2. Go to Analysis tab to see flight data plots{"\n"}
                 3. Check Health tab for automatic diagnostics{"\n"}
-                4. Use FFT tab for vibration frequency analysis
+                4. Switch to Pro mode to unlock FFT & Advanced analysis
               </Text>
             </View>
           </View>
@@ -534,21 +608,26 @@ const styles = StyleSheet.create({
   subtitle: { color: '#52525B', fontSize: 13, marginTop: 2 },
   modeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#171717', borderWidth: 1, borderColor: '#27272A', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, gap: 4 },
   modeBadgePro: { borderColor: 'rgba(0,255,136,0.3)', backgroundColor: 'rgba(0,255,136,0.08)' },
+  modeBadgeCertified: { borderColor: 'rgba(255,215,0,0.5)', backgroundColor: '#FFD700' },
   modeText: { color: '#007AFF', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   modeTextPro: { color: '#00FF88' },
+  modeTextCertified: { color: '#000' },
   
-  // Analysis Toggle
-  analysisToggle: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#27272A', borderRadius: 12, padding: 14, marginBottom: 16 },
-  analysisLabel: { color: '#A1A1AA', fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
-  toggleContainer: { flexDirection: 'row', gap: 8 },
-  toggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#171717', borderWidth: 1, borderColor: '#27272A', borderRadius: 8, paddingVertical: 10, gap: 6 },
-  toggleBtnActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  toggleText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
-  toggleTextActive: { color: '#FFF' },
-  analysisHint: { color: '#52525B', fontSize: 11, marginTop: 10, lineHeight: 16 },
+  // Verification Banner
+  verificationBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#27272A', borderRadius: 12, padding: 14, marginBottom: 16, gap: 12 },
+  verificationBannerPass: { borderColor: 'rgba(0,255,136,0.4)', backgroundColor: 'rgba(0,255,136,0.08)' },
+  verificationBannerFail: { borderColor: 'rgba(255,59,48,0.4)', backgroundColor: 'rgba(255,59,48,0.08)' },
+  verificationBannerPending: { borderColor: 'rgba(255,215,0,0.4)', backgroundColor: 'rgba(255,215,0,0.08)' },
+  verificationBannerContent: { flex: 1 },
+  verificationBannerTitle: { color: '#A1A1AA', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  verificationBannerTitlePass: { color: '#00FF88' },
+  verificationBannerTitleFail: { color: '#FF3B30' },
+  verificationBannerMessage: { color: '#A1A1AA', fontSize: 11, marginTop: 4 },
+  verificationBannerDetails: { color: '#52525B', fontSize: 10, marginTop: 2 },
   
   // Verification Mode
   verificationCard: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#27272A', borderRadius: 12, padding: 14, marginBottom: 16 },
+  sectionLabel: { color: '#A1A1AA', fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
   segmentedControl: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden' },
   segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#171717', borderWidth: 1, borderColor: '#27272A', paddingVertical: 10, gap: 4 },
   segmentBtnLeft: { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },

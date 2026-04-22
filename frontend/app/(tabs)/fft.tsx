@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState } from '../../components/AppContext';
+import { useRouter } from 'expo-router';
 import PlotlyChart from '../../components/PlotlyChart';
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -47,12 +48,36 @@ interface SpectrogramResult {
 }
 
 export default function FFTScreen() {
-  const { currentLogId, mode } = useAppState();
+  const { currentLogId, verificationMode } = useAppState();
+  const router = useRouter();
   const [selectedSignal, setSelectedSignal] = useState(SIGNALS[2]); // GyrZ default
   const [windowSize, setWindowSize] = useState(1024);
   const [loading, setLoading] = useState(false);
   const [fftData, setFftData] = useState<FFTResult | null>(null);
   const [spectrogramData, setSpectrogramData] = useState<SpectrogramResult | null>(null);
+
+  // Redirect if in beginner mode
+  if (verificationMode === 'beginner') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.restrictedContainer}>
+          <Ionicons name="lock-closed-outline" size={56} color="#FFD700" />
+          <Text style={styles.restrictedTitle}>Pro Feature</Text>
+          <Text style={styles.restrictedHint}>
+            FFT analysis is available in Pro and Certified modes.{"\n"}
+            Switch to Pro mode on the Dashboard to unlock.
+          </Text>
+          <TouchableOpacity
+            style={styles.upgradeBtn}
+            onPress={() => router.push('/')}
+          >
+            <Ionicons name="arrow-back" size={18} color="#FFF" />
+            <Text style={styles.upgradeBtnText}>Go to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const runFFT = async () => {
     if (!currentLogId) return;
@@ -145,24 +170,20 @@ export default function FFTScreen() {
           ))}
         </ScrollView>
 
-        {/* Window Size (Pro mode) */}
-        {mode === 'professional' && (
-          <>
-            <Text style={styles.sectionLabel}>Window Size</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
-              {WINDOW_SIZES.map((ws) => (
-                <TouchableOpacity
-                  key={ws}
-                  testID={`fft-window-${ws}`}
-                  style={[styles.chip, windowSize === ws && styles.chipActive]}
-                  onPress={() => setWindowSize(ws)}
-                >
-                  <Text style={[styles.chipText, windowSize === ws && styles.chipTextActive]}>{ws}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </>
-        )}
+        {/* Window Size */}
+        <Text style={styles.sectionLabel}>Window Size</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
+          {WINDOW_SIZES.map((ws) => (
+            <TouchableOpacity
+              key={ws}
+              testID={`fft-window-${ws}`}
+              style={[styles.chip, windowSize === ws && styles.chipActive]}
+              onPress={() => setWindowSize(ws)}
+            >
+              <Text style={[styles.chipText, windowSize === ws && styles.chipTextActive]}>{ws}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
         {/* Run Button */}
         <TouchableOpacity
@@ -221,18 +242,6 @@ export default function FFTScreen() {
             <PlotlyChart testID="spectrogram-chart" traces={spectrogramTraces} layout={spectrogramLayout} height={300} />
           </>
         )}
-
-        {/* Beginner explanation */}
-        {mode === 'beginner' && fftData && (
-          <View style={styles.beginnerCard}>
-            <Ionicons name="information-circle-outline" size={18} color="#007AFF" />
-            <Text style={styles.beginnerText}>
-              The FFT chart shows which frequencies are present in your signal.
-              {fftData.peaks.length > 0 && ` The strongest frequency is ${fftData.peaks[0].frequency.toFixed(1)} Hz.`}
-              {fftData.peaks.some(p => p.is_harmonic) && ' Some peaks are harmonics (multiples of the base frequency), often caused by motor vibration.'}
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -261,9 +270,12 @@ const styles = StyleSheet.create({
   harmonicText: { color: '#FF9500', fontSize: 9, fontWeight: '700', textTransform: 'uppercase' },
   infoBar: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#0A0A0A', borderRadius: 8, borderWidth: 1, borderColor: '#27272A', padding: 10, marginTop: 12 },
   infoItem: { color: '#A1A1AA', fontSize: 11, fontWeight: '500' },
-  beginnerCard: { flexDirection: 'row', backgroundColor: 'rgba(0,122,255,0.06)', borderWidth: 1, borderColor: 'rgba(0,122,255,0.2)', borderRadius: 10, padding: 12, marginTop: 16, gap: 8 },
-  beginnerText: { color: '#A1A1AA', fontSize: 12, lineHeight: 18, flex: 1 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle: { color: '#A1A1AA', fontSize: 18, fontWeight: '600', marginTop: 16 },
   emptyHint: { color: '#52525B', fontSize: 13, textAlign: 'center', marginTop: 6 },
+  restrictedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  restrictedTitle: { color: '#FFD700', fontSize: 20, fontWeight: '700', marginTop: 16 },
+  restrictedHint: { color: '#A1A1AA', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  upgradeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, marginTop: 20, gap: 8 },
+  upgradeBtnText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 });

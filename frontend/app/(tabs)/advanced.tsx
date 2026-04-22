@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, SafeAreaView, Slider,
+  ActivityIndicator, SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState } from '../../components/AppContext';
+import { useRouter } from 'expo-router';
 import GPSMap from '../../components/GPSMap';
 import PlotlyChart from '../../components/PlotlyChart';
 
@@ -60,23 +61,23 @@ interface VibeThrottleCorr {
 }
 
 export default function AdvancedAnalysisScreen() {
-  const { currentLogId, mode } = useAppState();
+  const { currentLogId, verificationMode } = useAppState();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'gps' | 'harmonics' | 'correlation'>('gps');
   const [gpsData, setGpsData] = useState<GPSData | null>(null);
   const [motorHarmonics, setMotorHarmonics] = useState<MotorHarmonics | null>(null);
   const [vibeThrottle, setVibeThrottle] = useState<VibeThrottleCorr | null>(null);
   const [loading, setLoading] = useState(false);
-  const [timelinePosition, setTimelinePosition] = useState(0);
 
   useEffect(() => {
-    if (currentLogId) {
+    if (currentLogId && verificationMode !== 'beginner') {
       loadData();
     } else {
       setGpsData(null);
       setMotorHarmonics(null);
       setVibeThrottle(null);
     }
-  }, [currentLogId]);
+  }, [currentLogId, verificationMode]);
 
   const loadData = async () => {
     if (!currentLogId) return;
@@ -138,6 +139,29 @@ export default function AdvancedAnalysisScreen() {
       }))
     : [];
 
+  // Redirect if in beginner mode
+  if (verificationMode === 'beginner') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.restrictedContainer}>
+          <Ionicons name="lock-closed-outline" size={56} color="#FFD700" />
+          <Text style={styles.restrictedTitle}>Pro Feature</Text>
+          <Text style={styles.restrictedHint}>
+            Advanced analysis (Motor Harmonics, Correlations, GPS) is available in Pro and Certified modes.{"\n"}
+            Switch to Pro mode on the Dashboard to unlock.
+          </Text>
+          <TouchableOpacity
+            style={styles.upgradeBtn}
+            onPress={() => router.push('/')}
+          >
+            <Ionicons name="arrow-back" size={18} color="#FFF" />
+            <Text style={styles.upgradeBtnText}>Go to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!currentLogId) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -163,7 +187,7 @@ export default function AdvancedAnalysisScreen() {
             onPress={() => setActiveTab('gps')}
           >
             <Ionicons name="map-outline" size={18} color={activeTab === 'gps' ? '#007AFF' : '#A1A1AA'} />
-            <Text style={[styles.tabText, activeTab === 'gps' && styles.tabTextActive]}>GPS Trajectory</Text>
+            <Text style={[styles.tabText, activeTab === 'gps' && styles.tabTextActive]}>GPS</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="tab-harmonics"
@@ -171,7 +195,7 @@ export default function AdvancedAnalysisScreen() {
             onPress={() => setActiveTab('harmonics')}
           >
             <Ionicons name="pulse-outline" size={18} color={activeTab === 'harmonics' ? '#007AFF' : '#A1A1AA'} />
-            <Text style={[styles.tabText, activeTab === 'harmonics' && styles.tabTextActive]}>Motor Harmonics</Text>
+            <Text style={[styles.tabText, activeTab === 'harmonics' && styles.tabTextActive]}>Motors</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="tab-correlation"
@@ -398,4 +422,9 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle: { color: '#A1A1AA', fontSize: 18, fontWeight: '600', marginTop: 16 },
   emptyHint: { color: '#52525B', fontSize: 13, textAlign: 'center', marginTop: 6 },
+  restrictedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  restrictedTitle: { color: '#FFD700', fontSize: 20, fontWeight: '700', marginTop: 16 },
+  restrictedHint: { color: '#A1A1AA', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  upgradeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, marginTop: 20, gap: 8 },
+  upgradeBtnText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 });

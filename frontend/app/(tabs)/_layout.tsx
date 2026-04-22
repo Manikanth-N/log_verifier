@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
+import { useAppState } from '../../components/AppContext';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -9,6 +10,11 @@ function TabIcon({ name, color }: { name: IconName; color: string }) {
 }
 
 export default function TabLayout() {
+  const { verificationMode } = useAppState();
+  
+  // Beginner mode hides FFT and Advanced tabs
+  const showAdvancedTabs = verificationMode !== 'beginner';
+
   return (
     <View style={styles.container}>
       <Tabs
@@ -46,6 +52,7 @@ export default function TabLayout() {
           options={{
             title: 'FFT',
             tabBarIcon: ({ color }) => <TabIcon name="bar-chart-outline" color={color} />,
+            href: showAdvancedTabs ? undefined : null,
           }}
         />
         <Tabs.Screen
@@ -67,6 +74,7 @@ export default function TabLayout() {
           options={{
             title: 'Advanced',
             tabBarIcon: ({ color }) => <TabIcon name="speedometer-outline" color={color} />,
+            href: showAdvancedTabs ? undefined : null,
           }}
         />
       </Tabs>
