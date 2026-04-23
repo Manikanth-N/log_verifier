@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, SafeAreaView, Alert,
+  ActivityIndicator, SafeAreaView, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppState, VerificationMode } from '../../components/AppContext';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NativeAnalysis from '../../modules/NativeAnalysis';
+
+const API = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 interface LogEntry {
   log_id: string;
@@ -59,17 +61,30 @@ export default function Dashboard() {
     setUploadProgress({ isUploading: true, progress: 0, status: 'Generating demo flight data...' });
     try {
       setUploadProgress({ isUploading: true, progress: 30, status: 'Processing signals...' });
-      const logData = await NativeAnalysis.generateDemoLog(120);
+
+      let logData: any;
+      if (Platform.OS === 'web') {
+        const res = await fetch(`${API}/api/logs/demo`, { method: 'POST' });
+        logData = await res.json();
+        logData.filename = logData.filename || 'demo_flight.bin';
+        logData.signals = {};
+      } else {
+        logData = await NativeAnalysis.generateDemoLog(120);
+      }
+
       setUploadProgress({ isUploading: true, progress: 80, status: 'Finalizing...' });
       
       await AsyncStorage.setItem(`log_${logData.log_id}`, JSON.stringify({
         log_id: logData.log_id,
         filename: logData.filename,
-        upload_date: new Date().toISOString(),
+        upload_date: logData.upload_date || new Date().toISOString(),
         duration_sec: logData.duration_sec,
         message_types: logData.message_types,
+        file_size: logData.file_size || 0,
+        vehicle_type: logData.vehicle_type || 'QuadCopter',
+        firmware: logData.firmware || 'ArduCopter V4.4.0',
         is_demo: true,
-        signals: logData.signals,
+        signals: logData.signals || {},
       }));
       
       setCurrentLogId(logData.log_id);
@@ -101,29 +116,52 @@ export default function Dashboard() {
         filename: file.name,
       });
 
-      // Use native module to parse log locally
       setUploadProgress({ isUploading: true, progress: 30, status: 'Parsing log structure...', filename: file.name });
       
       try {
-        const logData = await NativeAnalysis.parseLog(file.uri);
+        let logData: any;
+
+        if (Platform.OS === 'web') {
+          // Web: upload to backend API
+          const formData = new FormData();
+          const response = await fetch(file.uri);
+          const blob = await response.blob();
+          formData.append('file', blob, file.name);
+          
+          const uploadRes = await fetch(`${API}/api/logs/upload`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!uploadRes.ok) {
+            const err = await uploadRes.json();
+            throw new Error(err.detail || 'Upload failed');
+          }
+          logData = await uploadRes.json();
+          logData.signals = {};
+        } else {
+          // Android: use native module
+          logData = await NativeAnalysis.parseLog(file.uri);
+        }
+
         setUploadProgress({ isUploading: true, progress: 70, status: 'Processing signals...', filename: file.name });
         
         await AsyncStorage.setItem(`log_${logData.log_id}`, JSON.stringify({
           log_id: logData.log_id,
           filename: file.name,
-          upload_date: new Date().toISOString(),
+          upload_date: logData.upload_date || new Date().toISOString(),
           duration_sec: logData.duration_sec,
           message_types: logData.message_types,
-          file_size: file.size || 0,
+          file_size: file.size || logData.file_size || 0,
+          vehicle_type: logData.vehicle_type || 'Unknown',
           is_demo: false,
-          signals: logData.signals,
+          signals: logData.signals || {},
         }));
         
         setCurrentLogId(logData.log_id);
         setCurrentLogName(file.name);
         
-        // Run verification if in Certified mode with public key
-        if (verificationMode === 'certified' && publicKeyPath) {
+        // Run verification (Android only)
+        if (Platform.OS !== 'web' && verificationMode === 'certified' && publicKeyPath) {
           setUploadProgress({ isUploading: true, progress: 85, status: 'Verifying cryptographic signature...', filename: file.name });
           try {
             const verifyResult = await NativeAnalysis.verifyLog(file.uri, publicKeyPath, 'certified');

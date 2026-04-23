@@ -1,0 +1,36 @@
+version: "3.8"
+services:
+  mongodb:
+    image: mongo:7
+    container_name: log_verifier_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: ardupilot_analyzer
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: log_verifier_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URL: mongodb://mongodb:27017
+      DB_NAME: ardupilot_analyzer
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - upload_data:/app/uploads
+volumes:
+  mongo_data:
+  upload_data:
